@@ -10,6 +10,7 @@ The repository ships multiple examples for different integration styles.
 - [Chat App](./chat-app): Flutter UI with settings and streaming.
 - [llamadart CLI](./llamadart-cli): llama.cpp-style command-line workflow.
 - [llamadart Server](./llamadart-server): OpenAI-compatible local HTTP server.
+- [TUI Coding Agent](./tui-coding-agent): nocterm-based coding assistant flow.
 
 ## Which one should I start with?
 
@@ -17,6 +18,7 @@ The repository ships multiple examples for different integration styles.
 - Build a product UI: start with Chat App.
 - Need terminal workflow parity: start with llama CLI.
 - Need HTTP integration for tools/agents: start with llamadart Server.
+- Need an interactive coding-agent terminal UI: start with TUI Coding Agent.
 
 ## Global example requirements
 

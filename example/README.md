@@ -71,6 +71,23 @@ dart pub get
 dart run bin/llamadart_cli.dart --help
 ```
 
+### 5. TUI coding agent (`tui_coding_agent/`)
+A terminal UI coding agent built with `nocterm` and `llamadart` showing:
+- Streaming coding-chat UX in a TUI layout
+- Built-in tool loop (`list_files`, `read_file`, `search_files`, `write_file`, `run_command`)
+- Workspace-scoped path safety guard
+- Runtime model switching with `/model <source>`
+- Default GLM-4.7-Flash model source with custom model override support
+
+**Best for:** Building local terminal coding-agent workflows in Dart
+
+**Run:**
+```bash
+cd tui_coding_agent
+dart pub get
+dart run bin/tui_coding_agent.dart
+```
+
 ## Testing
 
 - `basic_app` (Dart console):
@@ -101,12 +118,19 @@ cd llamadart_cli
 dart test
 ```
 
+- `tui_coding_agent` (nocterm-based coding agent TUI):
+
+```bash
+cd tui_coding_agent
+dart test
+```
+
 Note: `chat_app` uses Flutter libraries (`dart:ui`), so `dart test` is not
 the correct runner for that example.
 
 ## Quick Start
 
-1. **Choose an example**: Basic (console), Chat (Flutter), API Server (Relic), or llama.cpp-style CLI clone (Dart)
+1. **Choose an example**: Basic (console), Chat (Flutter), API Server (Relic), llama.cpp-style CLI clone (Dart), or TUI coding agent (Dart + nocterm)
 2. **Download a model** (see each example's README)
 3. **Run the example**: Follow instructions in each subdirectory
 
@@ -145,6 +169,11 @@ example/
 ├── llamadart_cli/      # llama.cpp-style Dart CLI clone
 │   ├── bin/            # CLI entrypoint
 │   ├── lib/            # Parser + model resolver + chat runner
+│   ├── pubspec.yaml    # Dependencies
+│   └── README.md       # Instructions
+├── tui_coding_agent/   # Nocterm-based coding agent TUI
+│   ├── bin/            # TUI entrypoint
+│   ├── lib/            # Session, tools, and TUI components
 │   ├── pubspec.yaml    # Dependencies
 │   └── README.md       # Instructions
 └── chat_app/           # Flutter application

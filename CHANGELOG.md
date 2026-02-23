@@ -10,6 +10,10 @@
 *   **Stability and quality**:
     *   Added safe fallback handling for invalid persisted log-level settings.
     *   Added regression tests for persisted settings fallback behavior.
+*   **New example app**:
+    *   Added `example/tui_coding_agent`, a `nocterm`-based terminal coding agent with tool-calling loop, workspace-scoped file/command tools, and runtime model switching.
+    *   Default model source is GLM 4.7 Flash (`unsloth/GLM-4.7-Flash-GGUF:UD-Q4_K_XL`) with support for custom local paths/URLs/Hugging Face shorthand.
+    *   Added stable text-protocol tool mode as the default (native template grammar tool-calling remains available via `--native-tool-calling` for experimentation).
 
 ## 0.6.2
 
