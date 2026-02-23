@@ -1,20 +1,28 @@
 part of 'coding_agent_tui.dart';
 
-final Color _turboBlueBackground = Color.fromRGB(0, 0, 140);
-final Color _turboBluePanel = Color.fromRGB(0, 0, 118);
+final Color _turboBlueBackground = Color.fromRGB(0, 0, 170);
+final Color _turboBluePanel = Color.fromRGB(0, 0, 128);
 final Color _turboBlueHeader = Color.fromRGB(0, 0, 170);
+final Color _turboDesktopBackground = Color.fromRGB(0, 0, 170);
+final Color _turboDesktopPattern = Color.fromRGB(90, 120, 220);
 final Color _turboMenuBar = Color.fromRGB(192, 192, 192);
 final Color _turboMenuText = Color.fromRGB(0, 0, 0);
 final Color _turboMenuMnemonic = Color.fromRGB(170, 0, 0);
-final Color _turboMenuSelectionBackground = Color.fromRGB(0, 0, 170);
+final Color _turboMenuSelectionBackground = Color.fromRGB(0, 170, 0);
 final Color _turboMenuBorder = Color.fromRGB(0, 0, 0);
-final Color _turboDialogShadow = Color.fromRGB(64, 64, 64);
+final Color _turboStatusBarBackground = Color.fromRGB(192, 192, 192);
+final Color _turboDialogShadow = Color.fromRGB(96, 96, 96);
 final Color _turboDialogBody = Color.fromRGB(192, 192, 192);
 final Color _turboDialogTitleBar = Color.fromRGB(0, 0, 170);
 final Color _turboDialogText = Color.fromRGB(0, 0, 0);
 final Color _turboDialogTextDim = Color.fromRGB(55, 55, 55);
 final Color _turboDialogBorderLight = Color.fromRGB(255, 255, 255);
 final Color _turboDialogBorderDark = Color.fromRGB(90, 90, 90);
+final Color _turboWindowTitleActive = Color.fromRGB(0, 0, 170);
+final Color _turboWindowTitleInactive = Color.fromRGB(0, 0, 128);
+final Color _turboWindowSelectionBackground = Color.fromRGB(0, 170, 170);
+final Color _turboScrollTrack = Color.fromRGB(0, 170, 170);
+final Color _turboScrollThumb = Color.fromRGB(255, 255, 255);
 final Color _turboCodeBackground = Color.fromRGB(0, 0, 102);
 
 final TextStyle _assistantTextStyle = TextStyle(color: Colors.brightWhite);

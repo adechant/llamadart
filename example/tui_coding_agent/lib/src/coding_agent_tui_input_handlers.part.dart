@@ -18,6 +18,15 @@ extension _CodingAgentTuiInputHandlers on _CodingAgentTuiState {
       return _handleExitConfirmationLogicalKey(key);
     }
 
+    if (key == LogicalKey.f10) {
+      if (_openTopMenuIndex == null) {
+        _toggleTopMenu(0);
+      } else {
+        _closeTopMenu();
+      }
+      return true;
+    }
+
     if (_openTopMenuIndex != null) {
       if (key == LogicalKey.escape) {
         _closeTopMenu();
@@ -57,6 +66,34 @@ extension _CodingAgentTuiInputHandlers on _CodingAgentTuiState {
       _clearConversation();
       return true;
     }
+    if (key == LogicalKey.f4) {
+      _switchToNextWorkspaceSession(reverse: true);
+      return true;
+    }
+    if (key == LogicalKey.f5) {
+      _toggleActiveDesktopWindowZoom();
+      return true;
+    }
+    if (key == LogicalKey.f6) {
+      _focusNextDesktopWindow(reverse: false);
+      return true;
+    }
+    if (key == LogicalKey.f7) {
+      _createWorkspaceSession();
+      return true;
+    }
+    if (key == LogicalKey.f8) {
+      _switchToNextWorkspaceSession(reverse: false);
+      return true;
+    }
+    if (key == LogicalKey.f9) {
+      _focusNextDesktopWindow(reverse: true);
+      return true;
+    }
+    if (key == LogicalKey.f12) {
+      _closeActiveWorkspaceSession();
+      return true;
+    }
     if (key == LogicalKey.escape) {
       if (_busy) {
         _cancelInferenceFromShortcut();
@@ -84,23 +121,70 @@ extension _CodingAgentTuiInputHandlers on _CodingAgentTuiState {
       _closeTopMenu(updateStatus: false);
     }
 
-    if (event.matches(LogicalKey.f1) ||
-        event.matches(LogicalKey.keyH, ctrl: true)) {
+    if (_handleDesktopWindowKeyboardEvent(event)) {
+      return true;
+    }
+
+    if (event.matches(LogicalKey.f10)) {
+      if (_openTopMenuIndex == null) {
+        _toggleTopMenu(0);
+      } else {
+        _closeTopMenu();
+      }
+      return true;
+    }
+
+    if (event.matches(LogicalKey.f1)) {
       _handleSlashCommand('/help');
       return true;
     }
-    if (event.matches(LogicalKey.f2) ||
-        event.matches(LogicalKey.keyM, ctrl: true)) {
+    if (event.matches(LogicalKey.f2)) {
       _seedInput('/model ');
       return true;
     }
-    if (event.matches(LogicalKey.f3) ||
-        event.matches(LogicalKey.keyL, ctrl: true)) {
+    if (event.matches(LogicalKey.f3)) {
       _clearConversation();
       return true;
     }
+    if (event.matches(LogicalKey.f4)) {
+      _switchToNextWorkspaceSession(reverse: true);
+      return true;
+    }
+    if (event.matches(LogicalKey.f5)) {
+      _toggleActiveDesktopWindowZoom();
+      return true;
+    }
+    if (event.matches(LogicalKey.f6)) {
+      _focusNextDesktopWindow(reverse: event.isShiftPressed);
+      return true;
+    }
+    if (event.matches(LogicalKey.f7)) {
+      _createWorkspaceSession();
+      return true;
+    }
+    if (event.matches(LogicalKey.f8)) {
+      _switchToNextWorkspaceSession(reverse: event.isShiftPressed);
+      return true;
+    }
+    if (event.matches(LogicalKey.f9)) {
+      _focusNextDesktopWindow(reverse: true);
+      return true;
+    }
+    if (event.matches(LogicalKey.f12) ||
+        event.matches(LogicalKey.keyW, alt: true)) {
+      _closeActiveWorkspaceSession();
+      return true;
+    }
+    if (event.matches(LogicalKey.keyX, alt: true)) {
+      if (_busy) {
+        _cancelInferenceFromShortcut();
+      } else {
+        _requestExitConfirmation();
+      }
+      return true;
+    }
     if (event.matches(LogicalKey.escape) ||
-        event.matches(LogicalKey.keyQ, ctrl: true)) {
+        event.matches(LogicalKey.keyQ, alt: true)) {
       if (_busy) {
         _cancelInferenceFromShortcut();
       } else {
@@ -171,21 +255,6 @@ extension _CodingAgentTuiInputHandlers on _CodingAgentTuiState {
     }
     if (key == LogicalKey.keyS) {
       return 's';
-    }
-    if (key == LogicalKey.keyR) {
-      return 'r';
-    }
-    if (key == LogicalKey.keyC) {
-      return 'c';
-    }
-    if (key == LogicalKey.keyD) {
-      return 'd';
-    }
-    if (key == LogicalKey.keyP) {
-      return 'p';
-    }
-    if (key == LogicalKey.keyO) {
-      return 'o';
     }
     if (key == LogicalKey.keyW) {
       return 'w';
@@ -291,7 +360,9 @@ extension _CodingAgentTuiInputHandlers on _CodingAgentTuiState {
       }
 
       _openTopMenuIndex = menuIndex;
-      _openTopMenuItemIndex = 0;
+      _openTopMenuItemIndex = _firstSelectableTopMenuItemIndex(
+        _topMenus[menuIndex].items,
+      );
       _status =
           'Menu: ${_topMenus[menuIndex].label} (arrows/tab navigate, Enter select, Esc close)';
     });
@@ -336,7 +407,9 @@ extension _CodingAgentTuiInputHandlers on _CodingAgentTuiState {
 
     setState(() {
       _openTopMenuIndex = next;
-      _openTopMenuItemIndex = 0;
+      _openTopMenuItemIndex = _firstSelectableTopMenuItemIndex(
+        _topMenus[next].items,
+      );
       _status =
           'Menu: ${_topMenus[next].label} (arrows/tab navigate, Enter select, Esc close)';
     });
@@ -357,13 +430,16 @@ extension _CodingAgentTuiInputHandlers on _CodingAgentTuiState {
       return;
     }
 
-    var next = _openTopMenuItemIndex + (reverse ? -1 : 1);
-    if (next < 0) {
-      next = items.length - 1;
+    final hasSelectableItems = items.any((item) => !item.isSeparator);
+    if (!hasSelectableItems) {
+      return;
     }
-    if (next >= items.length) {
-      next = 0;
-    }
+
+    final next = _nextSelectableTopMenuItemIndex(
+      items,
+      start: _openTopMenuItemIndex,
+      reverse: reverse,
+    );
 
     setState(() {
       _openTopMenuItemIndex = next;
@@ -383,7 +459,46 @@ extension _CodingAgentTuiInputHandlers on _CodingAgentTuiState {
 
     final safeIndex = _openTopMenuItemIndex.clamp(0, items.length - 1);
     final item = items[safeIndex];
+    if (item.isSeparator) {
+      _moveTopMenuItem(reverse: false);
+      return;
+    }
     _runTopMenuCommand(item.command);
+  }
+
+  int _firstSelectableTopMenuItemIndex(List<_TopMenuItem> items) {
+    for (var i = 0; i < items.length; i++) {
+      if (!items[i].isSeparator) {
+        return i;
+      }
+    }
+    return 0;
+  }
+
+  int _nextSelectableTopMenuItemIndex(
+    List<_TopMenuItem> items, {
+    required int start,
+    required bool reverse,
+  }) {
+    if (items.isEmpty) {
+      return 0;
+    }
+
+    var next = start;
+    for (var i = 0; i < items.length; i++) {
+      next += reverse ? -1 : 1;
+      if (next < 0) {
+        next = items.length - 1;
+      }
+      if (next >= items.length) {
+        next = 0;
+      }
+      if (!items[next].isSeparator) {
+        return next;
+      }
+    }
+
+    return start.clamp(0, items.length - 1);
   }
 
   void _runTopMenuCommand(String command) {
@@ -654,6 +769,7 @@ extension _CodingAgentTuiInputHandlers on _CodingAgentTuiState {
 
     setState(() {
       _messages.clear();
+      _activeWorkspaceSession.history = <LlamaChatMessage>[];
       _activeAssistantMessageIndex = null;
       _toolSummaryMessageIndex = null;
       _resetTurnToolStats();
@@ -726,6 +842,7 @@ extension _CodingAgentTuiInputHandlers on _CodingAgentTuiState {
           _status = 'Ready.';
           _activeAssistantMessageIndex = null;
         });
+        _syncActiveWorkspaceHistorySnapshot();
       }
     }
   }
@@ -739,17 +856,73 @@ extension _CodingAgentTuiInputHandlers on _CodingAgentTuiState {
         text:
             'Commands:\n'
             '/help - show this help\n'
-            '/clear - clear chat log\n'
+            '/clear - clear active session log\n'
             '/model - show current model\n'
             '/model <path|url|owner/repo[:hint]> - switch model\n'
             '/workspace - print workspace root\n'
+            '/new - create a new session\n'
+            '/next - switch to next session\n'
+            '/prev - switch to previous session\n'
+            '/close - close current session\n'
+            '/zoom-window - zoom/unzoom active window\n'
+            '/next-window - focus next window\n'
+            '/prev-window - focus previous window\n'
+            '/tile-windows - arrange all windows in a tiled grid\n'
+            '/stack-windows - arrange all windows in stacked cascade\n'
             '/cancel - cancel current generation\n'
             '/exit - open exit confirmation\n'
             'TAB/Shift+TAB or Up/Down - slash command autocomplete\n'
-            'Menus: Alt+menu letter (File/Edit/Search/Run/Compile/Debug/Project/Options/Window/Help)\n'
-            'Shortcuts: F1/Ctrl+H help, F2/Ctrl+M model, F3/Ctrl+L clear, ESC cancel-or-exit-confirm, Ctrl+Q exit confirm\n'
+            'Menus: Alt+menu letter (File/Edit/Search/Windows/Help)\n'
+            'Shortcuts: F1 help, F2 model, F3 clear, F4 previous session, F5 zoom, F6 next window, F7 new session, F8 next session, F9 previous window, F10 menu, F12 close session, Alt+W close session, Alt+X exit\n'
+            'Window controls: Alt+Arrows move active window, Alt+Shift+Arrows resize active window\n'
+            'Mouse: click to focus window, drag title bar to move, drag ◢ handle to resize\n'
             'Tool mode: ${_session.enableNativeToolCalling ? 'native (experimental)' : 'stable text protocol'}',
       );
+      return;
+    }
+
+    if (command == '/new') {
+      _createWorkspaceSession();
+      return;
+    }
+
+    if (command == '/next') {
+      _switchToNextWorkspaceSession(reverse: false);
+      return;
+    }
+
+    if (command == '/prev') {
+      _switchToNextWorkspaceSession(reverse: true);
+      return;
+    }
+
+    if (command == '/close') {
+      _closeActiveWorkspaceSession();
+      return;
+    }
+
+    if (command == '/zoom-window') {
+      _toggleActiveDesktopWindowZoom();
+      return;
+    }
+
+    if (command == '/next-window') {
+      _focusNextDesktopWindow(reverse: false);
+      return;
+    }
+
+    if (command == '/prev-window') {
+      _focusNextDesktopWindow(reverse: true);
+      return;
+    }
+
+    if (command == '/tile-windows') {
+      _arrangeDesktopWindowsTiled();
+      return;
+    }
+
+    if (command == '/stack-windows') {
+      _arrangeDesktopWindowsStacked();
       return;
     }
 
@@ -828,11 +1001,13 @@ extension _CodingAgentTuiInputHandlers on _CodingAgentTuiState {
           },
         );
 
-        _pushMessage(
-          role: _AgentRole.system,
-          text: 'Model switched to ${_displayModelName()}. Conversation reset.',
-        );
         _session.resetConversation();
+        _resetAllWorkspaceHistories();
+        _syncActiveWorkspaceHistorySnapshot();
+        _resetAllWorkspaceMessages(
+          systemNotice:
+              'Model switched to ${_displayModelName()}. All session logs and context were reset.',
+        );
       } catch (error) {
         _pushMessage(
           role: _AgentRole.error,

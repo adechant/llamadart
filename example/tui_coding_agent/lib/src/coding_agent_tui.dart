@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:llamadart/llamadart.dart' show LlamaChatMessage;
 import 'package:nocterm/nocterm.dart';
 import 'package:path/path.dart' as p;
 
@@ -14,6 +15,7 @@ part 'coding_agent_tui_input_handlers.part.dart';
 part 'coding_agent_tui_menu_dialog.part.dart';
 part 'coding_agent_tui_messages.part.dart';
 part 'coding_agent_tui_theme.part.dart';
+part 'coding_agent_tui_windows.part.dart';
 
 class CodingAgentTui extends StatefulComponent {
   final CodingAgentConfig config;
@@ -26,11 +28,12 @@ class CodingAgentTui extends StatefulComponent {
 
 class _CodingAgentTuiState extends State<CodingAgentTui> {
   late final CodingAgentSession _session;
-  final AutoScrollController _scrollController = AutoScrollController();
   final TextEditingController _inputController = TextEditingController();
 
-  final List<_AgentMessage> _messages = <_AgentMessage>[];
   final Map<String, int> _turnToolUsage = <String, int>{};
+  final List<_WorkspaceSessionState> _workspaceSessions =
+      <_WorkspaceSessionState>[];
+  final List<_DesktopWindowState> _desktopWindows = <_DesktopWindowState>[];
 
   bool _busy = false;
   bool _ready = false;
@@ -47,18 +50,41 @@ class _CodingAgentTuiState extends State<CodingAgentTui> {
   List<String> _slashAutocompleteMatches = const <String>[];
   String _slashAutocompletePrefix = '';
   int _slashAutocompleteIndex = -1;
+  int _activeWorkspaceSessionIndex = 0;
+  int _sessionCounter = 1;
+  String _activeDesktopWindowId = '';
+  String? _draggingWindowId;
+  int _dragOffsetX = 0;
+  int _dragOffsetY = 0;
+  String? _resizingWindowId;
+  int _resizeOriginPointerX = 0;
+  int _resizeOriginPointerY = 0;
+  int _resizeOriginWidth = 0;
+  int _resizeOriginHeight = 0;
+  int _desktopWidth = 0;
+  int _desktopHeight = 0;
+  bool _desktopInitialized = false;
   String _status = 'Initializing...';
+
+  _WorkspaceSessionState get _activeWorkspaceSession =>
+      _workspaceSessions[_activeWorkspaceSessionIndex];
+
+  List<_AgentMessage> get _messages => _activeWorkspaceSession.messages;
 
   @override
   void initState() {
     super.initState();
     _session = CodingAgentSession(component.config);
+    _initializeWorkspaceSessions();
+    _initializeDesktopWindows();
     _bootstrap();
   }
 
   @override
   void dispose() {
-    _scrollController.dispose();
+    for (final sessionState in _workspaceSessions) {
+      _disposeWorkspaceSessionState(sessionState);
+    }
     _inputController.dispose();
     _session.dispose();
     super.dispose();
@@ -269,10 +295,7 @@ class _CodingAgentTuiState extends State<CodingAgentTui> {
       child: Column(
         children: <Component>[
           _buildTopMenuBar(),
-          _buildHeader(),
-          Expanded(child: _buildMessagesView()),
-          _buildInputBar(),
-          _buildSlashSuggestionsBar(),
+          Expanded(child: _buildDesktopArea()),
           _buildStatusBar(),
         ],
       ),
@@ -285,6 +308,15 @@ class _CodingAgentTuiState extends State<CodingAgentTui> {
         children: <Component>[
           shell,
           if (_openTopMenuIndex != null && !_showExitConfirm)
+            Positioned.fill(
+              top: 1,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _closeTopMenu,
+                child: SizedBox.expand(),
+              ),
+            ),
+          if (_openTopMenuIndex != null && !_showExitConfirm)
             _buildTopMenuDropdownOverlay(),
           if (_showExitConfirm) _buildExitConfirmationOverlay(),
         ],
@@ -292,34 +324,15 @@ class _CodingAgentTuiState extends State<CodingAgentTui> {
     );
   }
 
-  Component _buildHeader() {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 1, vertical: 0),
-      decoration: BoxDecoration(
-        color: _turboBlueHeader,
-        border: BoxBorder(bottom: BorderSide(color: Colors.brightWhite)),
-      ),
-      child: Row(
-        children: <Component>[
-          Text(
-            'llamadart agent',
-            style: TextStyle(
-              color: Colors.brightWhite,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          Spacer(),
-          Text(
-            'model: ${_displayModelName()}',
-            style: TextStyle(color: Colors.brightCyan),
-          ),
-        ],
-      ),
-    );
-  }
+  Component _buildMessagesView({
+    List<_AgentMessage>? messages,
+    AutoScrollController? controller,
+  }) {
+    final visibleMessages = messages ?? _messages;
+    final scrollController =
+        controller ?? _activeWorkspaceSession.scrollController;
 
-  Component _buildMessagesView() {
-    if (_messages.isEmpty) {
+    if (visibleMessages.isEmpty) {
       return Center(
         child: Text(
           'No messages yet. Ask a coding question.',
@@ -330,32 +343,19 @@ class _CodingAgentTuiState extends State<CodingAgentTui> {
 
     return Container(
       padding: EdgeInsets.all(1),
-      decoration: BoxDecoration(
-        color: _turboBluePanel,
-        border: BoxBorder.all(color: Colors.brightWhite),
-      ),
-      child: Container(
-        decoration: BoxDecoration(
-          color: _turboBluePanel,
-          border: BoxBorder.all(color: Colors.brightCyan),
-        ),
-        child: Scrollbar(
-          controller: _scrollController,
-          thumbVisibility: true,
-          child: ListView.builder(
-            controller: _scrollController,
-            padding: EdgeInsets.all(1),
-            itemCount: _messages.length,
-            itemBuilder: (BuildContext context, int index) {
-              return _MessageRow(message: _messages[index]);
-            },
-          ),
-        ),
+      decoration: BoxDecoration(color: _turboBluePanel),
+      child: ListView.builder(
+        controller: scrollController,
+        padding: EdgeInsets.all(1),
+        itemCount: visibleMessages.length,
+        itemBuilder: (BuildContext context, int index) {
+          return _MessageRow(message: visibleMessages[index]);
+        },
       ),
     );
   }
 
-  Component _buildInputBar() {
+  Component _buildInputBar({required bool focused}) {
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 1, vertical: 1),
       decoration: BoxDecoration(
@@ -366,18 +366,22 @@ class _CodingAgentTuiState extends State<CodingAgentTui> {
         children: <Component>[
           Text('> ', style: TextStyle(color: Colors.brightYellow)),
           Expanded(
-            child: TextField(
-              controller: _inputController,
-              focused: true,
-              enabled: !_busy || _showExitConfirm,
-              placeholder: _busy
-                  ? 'Assistant is working...'
-                  : 'Ask for code edits, tests, or analysis... (/ + TAB for commands)',
-              placeholderStyle: TextStyle(color: Colors.brightBlack),
-              style: TextStyle(color: Colors.brightWhite),
-              onChanged: _handleInputChanged,
-              onKeyEvent: _handleInputKeyEvent,
-              onSubmitted: (_) => _submitInput(),
+            child: ClipRect(
+              child: TextField(
+                controller: _inputController,
+                focused: focused,
+                enabled: focused && !_busy && !_showExitConfirm,
+                placeholder: _busy
+                    ? 'Assistant is working...'
+                    : (focused
+                          ? 'Ask for code edits, tests, or analysis... (/ + TAB for commands)'
+                          : 'Activate the Chat window (F6/mouse) to type'),
+                placeholderStyle: TextStyle(color: Colors.brightBlack),
+                style: TextStyle(color: Colors.brightWhite),
+                onChanged: _handleInputChanged,
+                onKeyEvent: _handleInputKeyEvent,
+                onSubmitted: (_) => _submitInput(),
+              ),
             ),
           ),
         ],
@@ -425,31 +429,70 @@ class _CodingAgentTuiState extends State<CodingAgentTui> {
   }
 
   Component _buildStatusBar() {
+    final activeWindowLabel = _activeDesktopWindowLabel();
+    final detail = _slashAutocompleteHint.isNotEmpty
+        ? _slashAutocompleteHint
+        : _status;
+    final sessionWindowSummary =
+        activeWindowLabel == _activeWorkspaceSession.title
+        ? _activeWorkspaceSession.title
+        : '${_activeWorkspaceSession.title} [$activeWindowLabel]';
+
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 1, vertical: 1),
+      padding: EdgeInsets.symmetric(horizontal: 1, vertical: 0),
       decoration: BoxDecoration(
-        color: _turboBlueHeader,
-        border: BoxBorder(top: BorderSide(color: Colors.brightCyan)),
+        color: _turboStatusBarBackground,
+        border: BoxBorder(top: BorderSide(color: _turboDialogBorderLight)),
       ),
       child: Row(
         children: <Component>[
+          _buildStatusShortcut(key: 'F1', label: 'Help'),
+          SizedBox(width: 1),
+          _buildStatusShortcut(key: 'F2', label: 'Model'),
+          SizedBox(width: 1),
+          _buildStatusShortcut(key: 'F3', label: 'Clear'),
+          SizedBox(width: 1),
+          _buildStatusShortcut(key: 'F5', label: 'Zoom'),
+          SizedBox(width: 1),
+          _buildStatusShortcut(key: 'F10', label: 'Menu'),
+          SizedBox(width: 1),
+          _buildStatusShortcut(key: 'Alt+X', label: 'Exit'),
+          SizedBox(width: 1),
+          Text('|', style: TextStyle(color: _turboMenuText)),
+          SizedBox(width: 1),
+          Expanded(
+            child: Text(detail, style: TextStyle(color: _turboMenuText)),
+          ),
           Text(
-            _busy ? '[busy]' : '[ready]',
+            sessionWindowSummary,
+            style: TextStyle(color: _turboDialogTextDim),
+          ),
+          SizedBox(width: 1),
+          Text(
+            _busy ? 'BUSY' : 'READY',
             style: TextStyle(
-              color: _busy ? Colors.yellow : Colors.green,
+              color: _busy ? Colors.brightRed : Colors.brightBlue,
               fontWeight: FontWeight.bold,
             ),
           ),
-          SizedBox(width: 1),
-          Expanded(
-            child: Text(_status, style: TextStyle(color: Colors.brightWhite)),
+        ],
+      ),
+    );
+  }
+
+  Component _buildStatusShortcut({required String key, required String label}) {
+    return RichText(
+      text: TextSpan(
+        style: TextStyle(color: _turboMenuText),
+        children: <InlineSpan>[
+          TextSpan(
+            text: key,
+            style: TextStyle(
+              color: _turboMenuMnemonic,
+              fontWeight: FontWeight.bold,
+            ),
           ),
-          Text(
-            _slashAutocompleteHint.isNotEmpty
-                ? _slashAutocompleteHint
-                : 'F1 HELP  F2 MODEL  F3 CLEAR  ESC STOP/EXIT  TAB COMPLETE  ALT+menu letter',
-            style: TextStyle(color: Colors.brightYellow),
-          ),
+          TextSpan(text: ' $label'),
         ],
       ),
     );

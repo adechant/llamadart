@@ -2,17 +2,33 @@ part of 'coding_agent_tui.dart';
 
 extension _CodingAgentTuiMenuDialogView on _CodingAgentTuiState {
   Component _buildTopMenuBar() {
-    final menuChildren = <Component>[];
+    final menuChildren = <Component>[
+      Container(
+        padding: EdgeInsets.symmetric(horizontal: 1, vertical: 0),
+        child: Text(
+          '≡',
+          style: TextStyle(
+            color: _turboMenuMnemonic,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+    ];
+
     for (var i = 0; i < _topMenus.length; i++) {
       final menu = _topMenus[i];
       final selected = _openTopMenuIndex == i;
       menuChildren.add(
-        Container(
-          padding: EdgeInsets.zero,
-          decoration: BoxDecoration(
-            color: selected ? _turboMenuSelectionBackground : _turboMenuBar,
+        GestureDetector(
+          onTap: () => _toggleTopMenu(i),
+          behavior: HitTestBehavior.opaque,
+          child: Container(
+            padding: EdgeInsets.zero,
+            decoration: BoxDecoration(
+              color: selected ? _turboMenuSelectionBackground : _turboMenuBar,
+            ),
+            child: _buildTurboMenuLabel(menu: menu, selected: selected),
           ),
-          child: _buildTurboMenuLabel(menu: menu, selected: selected),
         ),
       );
       if (i < _topMenus.length - 1) {
@@ -20,25 +36,23 @@ extension _CodingAgentTuiMenuDialogView on _CodingAgentTuiState {
       }
     }
 
+    menuChildren.add(
+      Expanded(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _openTopMenuIndex == null ? null : _closeTopMenu,
+          child: SizedBox(height: 1),
+        ),
+      ),
+    );
+
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 1, vertical: 0),
+      padding: EdgeInsets.zero,
       decoration: BoxDecoration(
         color: _turboMenuBar,
-        border: BoxBorder(bottom: BorderSide(color: Colors.brightWhite)),
+        border: BoxBorder(bottom: BorderSide(color: _turboDialogBorderLight)),
       ),
-      child: Row(
-        children: <Component>[
-          Text(
-            '::',
-            style: TextStyle(
-              color: _turboMenuMnemonic,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          SizedBox(width: 1),
-          ...menuChildren,
-        ],
-      ),
+      child: Row(children: menuChildren),
     );
   }
 
@@ -53,12 +67,12 @@ extension _CodingAgentTuiMenuDialogView on _CodingAgentTuiState {
     final mnemonicIndex = lowerLabel.indexOf(lowerMnemonic);
 
     final baseStyle = TextStyle(
-      color: selected ? Colors.brightWhite : _turboMenuText,
+      color: _turboMenuText,
       fontWeight: FontWeight.bold,
     );
 
     if (mnemonicIndex < 0 || mnemonicIndex >= label.length) {
-      return Text(label, style: baseStyle);
+      return Text(' $label ', style: baseStyle);
     }
 
     final before = label.substring(0, mnemonicIndex);
@@ -69,15 +83,15 @@ extension _CodingAgentTuiMenuDialogView on _CodingAgentTuiState {
       text: TextSpan(
         style: baseStyle,
         children: <InlineSpan>[
-          TextSpan(text: before),
+          TextSpan(text: ' $before'),
           TextSpan(
             text: marker,
             style: TextStyle(
-              color: selected ? Colors.brightYellow : _turboMenuMnemonic,
+              color: selected ? _turboMenuText : _turboMenuMnemonic,
               fontWeight: FontWeight.bold,
             ),
           ),
-          TextSpan(text: after),
+          TextSpan(text: '$after '),
         ],
       ),
     );
@@ -94,22 +108,51 @@ extension _CodingAgentTuiMenuDialogView on _CodingAgentTuiState {
     final width = _menuPopupWidth(menu).toDouble();
 
     final items = <Component>[];
+    final menuContentWidth = _menuPopupContentWidth(menu);
+    final menuShortcutWidth = _menuPopupShortcutWidth(menu);
     for (var i = 0; i < menu.items.length; i++) {
       final item = menu.items[i];
-      final selected = _openTopMenuItemIndex == i;
-      final line =
-          ' ${item.label.padRight(_menuPopupLabelWidth(menu))}  ${item.shortcut.padLeft(_menuPopupShortcutWidth(menu))} ';
-      items.add(
-        Container(
-          padding: EdgeInsets.symmetric(horizontal: 0, vertical: 0),
-          decoration: BoxDecoration(
-            color: selected ? _turboMenuSelectionBackground : _turboMenuBar,
+      if (item.isSeparator) {
+        items.add(
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 1, vertical: 0),
+            decoration: BoxDecoration(color: _turboMenuBar),
+            child: Text(
+              _repeatMenuRule(menuContentWidth),
+              style: TextStyle(color: _turboMenuBorder),
+            ),
           ),
-          child: Text(
-            line,
-            style: TextStyle(
-              color: selected ? Colors.brightWhite : _turboMenuText,
-              fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+        );
+        continue;
+      }
+
+      final selected = _openTopMenuItemIndex == i;
+      items.add(
+        GestureDetector(
+          onTap: () => _runTopMenuCommand(item.command),
+          behavior: HitTestBehavior.opaque,
+          child: Container(
+            padding: EdgeInsets.symmetric(horizontal: 1, vertical: 0),
+            decoration: BoxDecoration(
+              color: selected ? _turboMenuSelectionBackground : _turboMenuBar,
+            ),
+            child: Row(
+              children: <Component>[
+                Expanded(
+                  child: _buildTurboPopupItemLabel(
+                    label: item.label,
+                    selected: selected,
+                  ),
+                ),
+                if (menuShortcutWidth > 0)
+                  Text(
+                    item.shortcut.padLeft(menuShortcutWidth),
+                    style: TextStyle(
+                      color: _turboMenuText,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+              ],
             ),
           ),
         ),
@@ -118,7 +161,7 @@ extension _CodingAgentTuiMenuDialogView on _CodingAgentTuiState {
 
     return Positioned(
       left: left,
-      top: 1,
+      top: 2,
       child: SizedBox(
         width: width + 1,
         child: Container(
@@ -143,9 +186,9 @@ extension _CodingAgentTuiMenuDialogView on _CodingAgentTuiState {
   }
 
   int _menuPopupLeft(int menuIndex) {
-    var left = 4;
+    var left = 2;
     for (var i = 0; i < menuIndex; i++) {
-      left += _topMenus[i].label.length + 1;
+      left += _topMenus[i].label.length + 3;
     }
     return left;
   }
@@ -171,7 +214,46 @@ extension _CodingAgentTuiMenuDialogView on _CodingAgentTuiState {
   }
 
   int _menuPopupWidth(_TopMenu menu) {
-    return _menuPopupLabelWidth(menu) + _menuPopupShortcutWidth(menu) + 5;
+    return _menuPopupLabelWidth(menu) + _menuPopupShortcutWidth(menu) + 4;
+  }
+
+  int _menuPopupContentWidth(_TopMenu menu) {
+    return _menuPopupWidth(menu) - 4;
+  }
+
+  Component _buildTurboPopupItemLabel({
+    required String label,
+    required bool selected,
+  }) {
+    if (label.isEmpty) {
+      return Text('');
+    }
+
+    final marker = label.substring(0, 1);
+    final rest = label.substring(1);
+
+    return RichText(
+      text: TextSpan(
+        style: TextStyle(color: _turboMenuText, fontWeight: FontWeight.bold),
+        children: <InlineSpan>[
+          TextSpan(
+            text: marker,
+            style: TextStyle(
+              color: selected ? _turboMenuText : _turboMenuMnemonic,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          TextSpan(text: rest),
+        ],
+      ),
+    );
+  }
+
+  String _repeatMenuRule(int width) {
+    if (width <= 0) {
+      return '';
+    }
+    return List<String>.filled(width, '-').join();
   }
 
   Component _buildExitConfirmationOverlay() {
@@ -182,14 +264,14 @@ extension _CodingAgentTuiMenuDialogView on _CodingAgentTuiState {
 
     return Center(
       child: SizedBox(
-        width: 42,
+        width: 46,
         child: Container(
           color: _turboDialogShadow,
           padding: EdgeInsets.only(right: 1, bottom: 1),
           child: Container(
             decoration: BoxDecoration(
               color: _turboDialogBody,
-              border: BoxBorder.all(color: _turboDialogBorderDark),
+              border: BoxBorder.all(color: _turboDialogBorderLight),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -199,13 +281,13 @@ extension _CodingAgentTuiMenuDialogView on _CodingAgentTuiState {
                   decoration: BoxDecoration(
                     color: _turboDialogTitleBar,
                     border: BoxBorder(
-                      bottom: BorderSide(color: _turboDialogBorderDark),
+                      bottom: BorderSide(color: _turboDialogBorderLight),
                     ),
                   ),
                   child: Row(
                     children: <Component>[
                       Text(
-                        ' Confirm Exit ',
+                        '[■] Confirm Exit',
                         style: TextStyle(
                           color: Colors.brightWhite,
                           fontWeight: FontWeight.bold,
@@ -220,7 +302,10 @@ extension _CodingAgentTuiMenuDialogView on _CodingAgentTuiState {
                   padding: EdgeInsets.symmetric(horizontal: 1, vertical: 0),
                   child: Text(
                     prompt,
-                    style: TextStyle(color: _turboDialogText),
+                    style: TextStyle(
+                      color: _turboDialogText,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
                 Container(
@@ -246,7 +331,7 @@ extension _CodingAgentTuiMenuDialogView on _CodingAgentTuiState {
                   decoration: BoxDecoration(
                     color: _turboDialogBody,
                     border: BoxBorder(
-                      top: BorderSide(color: _turboDialogBorderLight),
+                      top: BorderSide(color: _turboDialogBorderDark),
                     ),
                   ),
                   child: Text(
@@ -269,15 +354,15 @@ extension _CodingAgentTuiMenuDialogView on _CodingAgentTuiState {
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 1, vertical: 0),
       decoration: BoxDecoration(
-        color: selected ? _turboDialogTitleBar : _turboDialogBody,
+        color: selected ? _turboWindowSelectionBackground : _turboDialogBody,
         border: BoxBorder.all(
-          color: selected ? _turboDialogBorderLight : _turboDialogBorderDark,
+          color: selected ? _turboDialogBorderDark : _turboDialogBorderLight,
         ),
       ),
       child: Text(
         label,
         style: TextStyle(
-          color: selected ? Colors.brightWhite : _turboDialogText,
+          color: selected ? Colors.black : _turboDialogText,
           fontWeight: FontWeight.bold,
         ),
       ),

@@ -18,12 +18,16 @@ GLM). Native template grammar tool-calling is optional and can be enabled with
 ## Features
 
 - Streaming assistant output in a TUI chat layout
+- TurboVision-inspired desktop with overlapping windows
 - Turbo C-style menu bar with popup menus (`Alt` + mnemonic)
 - Compact centered exit confirmation dialog
 - Built-in coding tools: `list_files`, `read_file`, `search_files`,
   `write_file`, `run_command`
 - Workspace path guard (blocks tool access outside the selected workspace)
 - Model switching command at runtime (`/model <source>`)
+- Multi-session chat workflow (create/switch/close local sessions)
+- One desktop window per session (MDI-style overlapping chat windows)
+- Mouse window controls (focus, drag title bar, resize from lower-right handle)
 - Slash command autocomplete (`Tab`, `Shift+Tab`, `Up`, `Down`)
 - Tool-policy guardrails:
   - direct conceptual prompts default to no-tool answers
@@ -66,21 +70,41 @@ dart run bin/tui_coding_agent.dart --native-tool-calling
 ## Interactive Commands
 
 - `/help` - Show available commands
-- `/clear` - Clear conversation log
+- `/clear` - Clear active session log
 - `/model` - Show current model source and loaded path
 - `/model <path|url|owner/repo[:hint]>` - Switch model and reset session history
 - `/workspace` - Show workspace root
+- `/new` - Create a new session
+- `/next` - Switch to next session
+- `/prev` - Switch to previous session
+- `/close` - Close current session
+- `/zoom-window` - Zoom/unzoom active desktop window
+- `/next-window` - Focus next desktop window
+- `/prev-window` - Focus previous desktop window
+- `/tile-windows` - Arrange all windows in a tiled grid
+- `/stack-windows` - Arrange all windows in stacked cascade
 - `/cancel` - Cancel active generation
 - `/exit` - Open exit confirmation dialog
 - `/quit` - Open exit confirmation dialog
 
 ## Keyboard Shortcuts
 
-- `F1` or `Ctrl+H` - Show help
-- `F2` or `Ctrl+M` - Seed `/model ` command
-- `F3` or `Ctrl+L` - Clear conversation
+- `F1` - Show help
+- `F2` - Seed `/model ` command
+- `F3` - Clear conversation
+- `F4` - Previous session
+- `F5` - Zoom/unzoom active window
+- `F6` - Focus next desktop window
+- `F7` - Create new session
+- `F8` - Next session
+- `F9` - Focus previous desktop window
+- `F10` - Open/close top menu bar
+- `F12` - Close active session
+- `Alt+W` - Close active session
+- `Alt+X` - Open exit confirmation
+- `Alt` + Arrow keys - Move active window
+- `Alt` + `Shift` + Arrow keys - Resize active window
 - `Esc` - Cancel generation when busy, otherwise open exit confirmation
-- `Ctrl+Q` - Open exit confirmation
 - `Alt+<menu letter>` - Open top menu (`File/Edit/Search/...`)
 
 In the exit confirmation dialog:

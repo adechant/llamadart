@@ -100,6 +100,32 @@ class CodingAgentSession {
     _session?.reset();
   }
 
+  /// Returns a snapshot of the current conversation history.
+  ///
+  /// If the chat session is not initialized yet, returns an empty list.
+  List<LlamaChatMessage> snapshotConversationHistory() {
+    final session = _session;
+    if (session == null) {
+      return const <LlamaChatMessage>[];
+    }
+    return List<LlamaChatMessage>.from(session.history);
+  }
+
+  /// Replaces the current conversation history with [history].
+  ///
+  /// If the chat session is not initialized yet, this call is ignored.
+  void restoreConversationHistory(List<LlamaChatMessage> history) {
+    final session = _session;
+    if (session == null) {
+      return;
+    }
+
+    session.reset();
+    for (final message in history) {
+      session.addMessage(message);
+    }
+  }
+
   void cancelGeneration() {
     _engine.cancelGeneration();
   }
