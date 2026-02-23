@@ -26,8 +26,22 @@ class SettingsService {
   static const _keyThinkingBudgetTokens = 'thinking_budget_tokens';
   static const _keySingleTurnMode = 'single_turn_mode';
 
+  LlamaLogLevel _parseLogLevel(int? index, LlamaLogLevel fallback) {
+    if (index == null || index < 0 || index >= LlamaLogLevel.values.length) {
+      return fallback;
+    }
+    return LlamaLogLevel.values[index];
+  }
+
   Future<ChatSettings> loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
+    final backendIndex = prefs.getInt(_keyBackend);
+    final preferredBackend =
+        backendIndex != null &&
+            backendIndex >= 0 &&
+            backendIndex < GpuBackend.values.length
+        ? GpuBackend.values[backendIndex]
+        : GpuBackend.auto;
     final savedContextSize = prefs.getInt(_keyContext);
     final effectiveContextSize = switch (savedContextSize) {
       null => 4096,
@@ -39,7 +53,7 @@ class SettingsService {
     return ChatSettings(
       modelPath: prefs.getString(_keyModelPath),
       mmprojPath: prefs.getString(_keyMmprojPath),
-      preferredBackend: GpuBackend.values[prefs.getInt(_keyBackend) ?? 0],
+      preferredBackend: preferredBackend,
       temperature: prefs.getDouble(_keyTemp) ?? 0.7,
       topK: prefs.getInt(_keyTopK) ?? 40,
       topP: prefs.getDouble(_keyTopP) ?? 0.9,
@@ -50,10 +64,11 @@ class SettingsService {
       gpuLayers: prefs.getInt(_keyGpuLayers) ?? 32,
       numberOfThreads: prefs.getInt(_keyThreads) ?? 0,
       numberOfThreadsBatch: prefs.getInt(_keyThreadsBatch) ?? 0,
-      logLevel: LlamaLogLevel
-          .values[prefs.getInt(_keyLogLevel) ?? LlamaLogLevel.none.index],
-      nativeLogLevel: LlamaLogLevel
-          .values[prefs.getInt(_keyNativeLogLevel) ?? LlamaLogLevel.warn.index],
+      logLevel: _parseLogLevel(prefs.getInt(_keyLogLevel), LlamaLogLevel.none),
+      nativeLogLevel: _parseLogLevel(
+        prefs.getInt(_keyNativeLogLevel),
+        LlamaLogLevel.warn,
+      ),
       toolsEnabled: prefs.getBool(_keyToolsEnabled) ?? false,
       toolDeclarations: prefs.getString(_keyToolDeclarations) ?? '[]',
       thinkingEnabled: prefs.getBool(_keyThinkingEnabled) ?? true,

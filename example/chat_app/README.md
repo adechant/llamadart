@@ -183,6 +183,14 @@ _(Add screenshots here when complete)_
 - Check if `GPU Layers` is set to a high enough value (default 99 offloads all layers).
 - Use a model with a smaller quantization level (e.g., Q4_K_M).
 
+**Slow model downloads on iOS/Android:**
+- Run on a release/profile build (`flutter run --release`) for realistic transfer performance.
+- Large multimodal bundles download both model and mmproj files; expect two-stage transfer.
+- Optional Hugging Face auth can improve throughput/rate-limits:
+  `flutter run --dart-define=HF_TOKEN=<your_token>`
+- Optional experimental parallel range downloader for large files:
+  `flutter run --dart-define=LLAMADART_CHAT_PARALLEL_DOWNLOAD=true`
+
 **Backend list/selection notes:**
 - The settings sheet shows detected runtime backends/devices, not only packaged modules.
 - Legacy saved `Auto` backend preferences are resolved to the best detected backend at runtime.
@@ -256,6 +264,7 @@ _(Add screenshots here when complete)_
 - Model selection auto-wires mmproj URLs for multimodal web models.
 - Image/audio attachments on web use browser file bytes (local path-based loading remains native-only).
 - On web, model files are loaded by URL (local file download/cache flow differs from native).
+- On web, **Download** verifies remote model/mmproj availability without buffering full GGUF files in app memory; bridge cache is populated on first model load.
 
 ### Hugging Face static deployment (CI)
 

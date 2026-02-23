@@ -54,6 +54,28 @@ void main() {
       expect(updates.last.fullThinking, 'ab');
       expect(updates.last.shouldNotify, isTrue);
     });
+
+    test('smooths large streamed chunks and flushes final text', () async {
+      final longChunk = List<String>.filled(260, 'x').join();
+      final updates = <GenerationStreamUpdate>[];
+
+      final result = await service.consumeStream(
+        stream: Stream<LlamaCompletionChunk>.fromIterable(
+          <LlamaCompletionChunk>[_chunk(content: longChunk)],
+        ),
+        thinkingEnabled: false,
+        uiNotifyIntervalMs: -1,
+        cleanResponse: (value) => value,
+        shouldContinue: () => true,
+        onUpdate: updates.add,
+      );
+
+      expect(result.fullResponse, longChunk);
+      expect(updates.length, greaterThanOrEqualTo(2));
+      expect(updates.first.cleanText.length, lessThan(longChunk.length));
+      expect(updates.last.cleanText, longChunk);
+      expect(updates.last.shouldNotify, isTrue);
+    });
   });
 }
 

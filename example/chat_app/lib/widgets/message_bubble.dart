@@ -9,13 +9,20 @@ import '../models/chat_message.dart';
 import 'tool_execution_card.dart';
 
 class MessageBubble extends StatelessWidget {
+  static final RegExp _orderedListRegex = RegExp(
+    r'^\s*\d+\.\s',
+    multiLine: true,
+  );
+
   final ChatMessage message;
   final bool isNextSame;
+  final bool isStreaming;
 
   const MessageBubble({
     super.key,
     required this.message,
     required this.isNextSame,
+    this.isStreaming = false,
   });
 
   @override
@@ -86,14 +93,22 @@ class MessageBubble extends StatelessWidget {
               else if (isTypingPlaceholder)
                 _buildTypingBubble(context)
               else if (message.text.isNotEmpty)
-                _buildMarkdownBubble(
-                  context,
-                  message.text,
-                  bubbleColor: bubbleColor,
-                  textColor: textColor,
-                  border: border,
-                  isUser: isUser,
-                ),
+                isStreaming && !isUser
+                    ? _buildStreamingTextBubble(
+                        context,
+                        message.text,
+                        bubbleColor: bubbleColor,
+                        textColor: textColor,
+                        border: border,
+                      )
+                    : _buildResponseBubble(
+                        context,
+                        message.text,
+                        bubbleColor: bubbleColor,
+                        textColor: textColor,
+                        border: border,
+                        isUser: isUser,
+                      ),
             ],
           ),
         ),
@@ -150,6 +165,99 @@ class MessageBubble extends StatelessWidget {
               fontWeight: FontWeight.w500,
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResponseBubble(
+    BuildContext context,
+    String text, {
+    required Color bubbleColor,
+    required Color textColor,
+    required BorderRadius border,
+    required bool isUser,
+  }) {
+    if (!_hasMarkdownSyntax(text)) {
+      return _buildPlainTextBubble(
+        context,
+        text,
+        bubbleColor: bubbleColor,
+        textColor: textColor,
+        border: border,
+        isUser: isUser,
+      );
+    }
+
+    return _buildMarkdownBubble(
+      context,
+      text,
+      bubbleColor: bubbleColor,
+      textColor: textColor,
+      border: border,
+      isUser: isUser,
+    );
+  }
+
+  bool _hasMarkdownSyntax(String text) {
+    if (text.contains('```') ||
+        text.contains('`') ||
+        text.contains('**') ||
+        text.contains('~~') ||
+        text.contains('](') ||
+        text.contains('|')) {
+      return true;
+    }
+
+    final trimmed = text.trimLeft();
+    if (trimmed.startsWith('#') ||
+        trimmed.startsWith('> ') ||
+        trimmed.startsWith('- ') ||
+        trimmed.startsWith('* ')) {
+      return true;
+    }
+
+    if (text.contains('\n- ') || text.contains('\n* ')) {
+      return true;
+    }
+
+    return _orderedListRegex.hasMatch(text);
+  }
+
+  Widget _buildPlainTextBubble(
+    BuildContext context,
+    String text, {
+    required Color bubbleColor,
+    required Color textColor,
+    required BorderRadius border,
+    required bool isUser,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+      decoration: BoxDecoration(
+        color: bubbleColor,
+        borderRadius: border,
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(
+            alpha: isUser ? 0.2 : 0.35,
+          ),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.16),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: SelectableText(
+        text,
+        style: TextStyle(
+          color: textColor.withValues(alpha: isUser ? 0.98 : 0.95),
+          fontSize: 16,
+          height: 1.45,
         ),
       ),
     );
@@ -234,6 +342,42 @@ class MessageBubble extends StatelessWidget {
                 : colorScheme.surfaceContainerHighest,
             borderRadius: BorderRadius.circular(8),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStreamingTextBubble(
+    BuildContext context,
+    String text, {
+    required Color bubbleColor,
+    required Color textColor,
+    required BorderRadius border,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+      decoration: BoxDecoration(
+        color: bubbleColor,
+        borderRadius: border,
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.35),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.16),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: textColor.withValues(alpha: 0.95),
+          fontSize: 16,
+          height: 1.45,
         ),
       ),
     );

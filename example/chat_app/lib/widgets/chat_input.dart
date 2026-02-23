@@ -120,8 +120,10 @@ class _ChatInputState extends State<ChatInput> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    _buildFunctionCallingRow(context, provider),
-                    const SizedBox(height: 10),
+                    if (provider.toolsEnabled) ...[
+                      _buildFunctionCallingRow(context, provider),
+                      const SizedBox(height: 10),
+                    ],
                     if (provider.stagedParts.isNotEmpty)
                       _buildStagedPartsStrip(context, provider),
                     Row(
