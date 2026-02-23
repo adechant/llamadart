@@ -25,6 +25,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   bool _wasGenerating = false;
   bool _showScrollToBottom = false;
+  bool _autoFollowScrollScheduled = false;
   ChatProvider? _providerForListener;
 
   @override
@@ -42,6 +43,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void dispose() {
     _providerForListener?.removeListener(_onProviderUpdate);
+    _autoFollowScrollScheduled = false;
     _scrollController.removeListener(_onScrollChanged);
     _controller.dispose();
     _scrollController.dispose();
@@ -64,11 +66,15 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _onProviderUpdate() {
     if (!mounted) return;
-    final provider = context.read<ChatProvider>();
+    final provider = _providerForListener;
+    if (provider == null) {
+      return;
+    }
+
     final shouldAutoFollowAfterGeneration = _distanceFromBottom() < 1200;
 
     if (provider.isGenerating) {
-      _scrollToBottom();
+      _scheduleAutoFollowScroll();
     }
 
     if (_wasGenerating && !provider.isGenerating) {
@@ -86,6 +92,21 @@ class _ChatScreenState extends State<ChatScreen> {
       });
     }
     _wasGenerating = provider.isGenerating;
+  }
+
+  void _scheduleAutoFollowScroll() {
+    if (_autoFollowScrollScheduled) {
+      return;
+    }
+
+    _autoFollowScrollScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _autoFollowScrollScheduled = false;
+      if (!mounted) {
+        return;
+      }
+      _scrollToBottom();
+    });
   }
 
   void _scrollToBottom({bool force = false}) {
@@ -220,9 +241,15 @@ class _ChatScreenState extends State<ChatScreen> {
                               provider.messages[index + 1].isUser ==
                               message.isUser;
                         }
+                        final isStreamingMessage =
+                            provider.isGenerating &&
+                            !message.isUser &&
+                            !message.isInfo &&
+                            index == provider.messages.length - 1;
                         return MessageBubble(
                           message: message,
                           isNextSame: isNextSame,
+                          isStreaming: isStreamingMessage,
                         );
                       },
                     );

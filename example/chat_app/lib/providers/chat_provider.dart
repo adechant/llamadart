@@ -36,6 +36,9 @@ class ChatProvider extends ChangeNotifier {
   }
 ]
 ''';
+  static const Duration _settingsSaveDebounceDelay = Duration(
+    milliseconds: 220,
+  );
 
   final ChatService _chatService;
   final ChatGenerationService _chatGenerationService;
@@ -72,6 +75,7 @@ class ChatProvider extends ChangeNotifier {
   bool _templateSupportsTools = true;
   ChatFormat? _detectedChatFormat;
   String? _error;
+  Timer? _settingsSaveDebounce;
 
   // Telemetry
   int _contextLimit = 2048;
@@ -381,8 +385,6 @@ class ChatProvider extends ChangeNotifier {
       debugPrint("Error fetching devices: $e");
     }
 
-    await _resolveAutoPreferredBackend(backendInfo: backendInfo);
-
     if (backendInfo != null) {
       _availableDevices = BackendUtils.parseBackendDevices(backendInfo);
       _activeBackend = BackendUtils.deriveActiveBackendLabel(
@@ -459,9 +461,9 @@ class ChatProvider extends ChangeNotifier {
 
     updateLoadingUi(0.04, forceNotify: true);
 
-    // Estimate dynamic settings if we have a model path but no custom settings yet
-    // or if we're reloading and want to be safe.
-    if (_settings.gpuLayers == 32 || _settings.gpuLayers == 99) {
+    // Estimate dynamic settings only when backend preference remains Auto.
+    if (_settings.preferredBackend == GpuBackend.auto &&
+        (_settings.gpuLayers == 32 || _settings.gpuLayers == 99)) {
       try {
         await estimateDynamicSettings();
       } catch (e) {
@@ -472,7 +474,6 @@ class ChatProvider extends ChangeNotifier {
     updateLoadingUi(0.1);
 
     try {
-      await _resolveAutoPreferredBackend();
       await _chatService.engine.setDartLogLevel(_settings.logLevel);
       await _chatService.engine.setNativeLogLevel(_settings.nativeLogLevel);
       updateLoadingUi(0.14);
@@ -687,17 +688,26 @@ class ChatProvider extends ChangeNotifier {
           chatTemplateKwargs: templateKwargs,
         ),
         thinkingEnabled: _settings.thinkingEnabled,
-        uiNotifyIntervalMs: kIsWeb ? 120 : 50,
+        uiNotifyIntervalMs: kIsWeb ? 42 : 16,
         cleanResponse: _chatService.cleanResponse,
         shouldContinue: () => _isGenerating,
         onUpdate: (update) {
-          _currentTokens++;
-          _updateStreamingAssistantMessage(
-            cleanText: update.cleanText,
-            fullThinking: update.fullThinking,
-          );
+          _currentTokens += update.generatedTokenDelta;
+
+          final shouldRefreshStreamingMessage =
+              update.shouldNotify || update.generatedTokenDelta == 0;
+          var streamingMessageChanged = false;
+          if (shouldRefreshStreamingMessage) {
+            streamingMessageChanged = _updateStreamingAssistantMessage(
+              cleanText: update.cleanText,
+              fullThinking: update.fullThinking,
+            );
+          }
+
           if (update.shouldNotify) {
-            notifyListeners();
+            if (streamingMessageChanged || update.generatedTokenDelta != 0) {
+              notifyListeners();
+            }
           }
         },
       );
@@ -809,12 +819,18 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
-  void _updateStreamingAssistantMessage({
+  bool _updateStreamingAssistantMessage({
     required String cleanText,
     required String fullThinking,
   }) {
     if (_messages.isEmpty || _messages.last.isUser) {
-      return;
+      return false;
+    }
+
+    final lastMessage = _messages.last;
+    final currentThinking = lastMessage.thinkingText ?? '';
+    if (lastMessage.text == cleanText && currentThinking == fullThinking) {
+      return false;
     }
 
     final parts = <LlamaContentPart>[];
@@ -829,6 +845,7 @@ class ChatProvider extends ChangeNotifier {
       text: cleanText,
       parts: parts,
     );
+    return true;
   }
 
   void _addInfoMessage(String text) {
@@ -936,11 +953,29 @@ class ChatProvider extends ChangeNotifier {
   }
 
   void _updateSettings(ChatSettings newSettings) {
+    final declarationsChanged =
+        _settings.toolDeclarations != newSettings.toolDeclarations;
     _settings = newSettings;
-    _rebuildDeclaredToolsFromSettings();
-    _settingsService.saveSettings(_settings);
+    if (declarationsChanged) {
+      _rebuildDeclaredToolsFromSettings();
+    }
+    _scheduleSettingsSave();
     _syncActiveConversationSnapshot(touchUpdatedAt: false);
     notifyListeners();
+  }
+
+  void _scheduleSettingsSave() {
+    _settingsSaveDebounce?.cancel();
+    _settingsSaveDebounce = Timer(_settingsSaveDebounceDelay, () {
+      _settingsSaveDebounce = null;
+      unawaited(_settingsService.saveSettings(_settings));
+    });
+  }
+
+  Future<void> _saveSettingsNow() async {
+    _settingsSaveDebounce?.cancel();
+    _settingsSaveDebounce = null;
+    await _settingsService.saveSettings(_settings);
   }
 
   void updateTemperature(double value) =>
@@ -1096,7 +1131,7 @@ class ChatProvider extends ChangeNotifier {
 
     if (_settings.toolsEnabled && !_templateSupportsTools) {
       _settings = _settings.copyWith(toolsEnabled: false);
-      _settingsService.saveSettings(_settings);
+      unawaited(_saveSettingsNow());
       _messages.add(
         ChatMessage(
           text:
@@ -1107,26 +1142,6 @@ class ChatProvider extends ChangeNotifier {
       );
       _syncActiveConversationSnapshot();
     }
-  }
-
-  Future<void> _resolveAutoPreferredBackend({String? backendInfo}) async {
-    if (_settings.preferredBackend != GpuBackend.auto) {
-      return;
-    }
-
-    if (kIsWeb) {
-      // Keep Auto on web: the bridge backend interprets non-CPU as WebGPU.
-      return;
-    }
-
-    final info = backendInfo ?? await _getBackendInfoBestEffort();
-    final resolved = info == null
-        ? GpuBackend.cpu
-        : BackendUtils.selectBestBackendFromInfo(info);
-
-    _settings = _settings.copyWith(preferredBackend: resolved);
-    await _settingsService.saveSettings(_settings);
-    _syncActiveConversationSnapshot(touchUpdatedAt: false);
   }
 
   Future<String?> _getBackendInfoBestEffort() async {
@@ -1158,6 +1173,9 @@ class ChatProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _settingsSaveDebounce?.cancel();
+    _settingsSaveDebounce = null;
+    unawaited(_settingsService.saveSettings(_settings));
     stopGeneration();
     _session?.reset();
     _session = null;
@@ -1172,6 +1190,7 @@ class ChatProvider extends ChangeNotifier {
 
     _isShuttingDown = true;
     try {
+      await _saveSettingsNow();
       stopGeneration();
       _session?.reset();
       _session = null;

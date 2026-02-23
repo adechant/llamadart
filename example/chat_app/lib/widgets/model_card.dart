@@ -7,6 +7,8 @@ class ModelCard extends StatelessWidget {
   final bool isDownloaded;
   final bool isDownloading;
   final double progress;
+  final String? downloadStatusLabel;
+  final String? downloadTransferLabel;
   final bool isWeb;
   final bool isSelected;
   final int gpuLayers;
@@ -24,6 +26,8 @@ class ModelCard extends StatelessWidget {
     required this.isDownloaded,
     required this.isDownloading,
     required this.progress,
+    this.downloadStatusLabel,
+    this.downloadTransferLabel,
     required this.isWeb,
     required this.isSelected,
     required this.gpuLayers,
@@ -193,7 +197,9 @@ class ModelCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  isDownloading ? 'Downloading...' : 'Paused',
+                  isDownloading
+                      ? (downloadStatusLabel ?? 'Downloading...')
+                      : 'Paused',
                   style: TextStyle(
                     fontSize: 12,
                     color: isDownloading ? colorScheme.primary : Colors.orange,
@@ -235,6 +241,16 @@ class ModelCard extends StatelessWidget {
                 ),
               ],
             ),
+            if (downloadTransferLabel != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                downloadTransferLabel!,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
           ],
           if (!isDownloading) ...[
             if (isDownloaded && !isWeb && isSelected) ...[

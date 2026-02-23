@@ -31,7 +31,8 @@ class ManageModelsScreen extends StatefulWidget {
   State<ManageModelsScreen> createState() => _ManageModelsScreenState();
 }
 
-class _ManageModelsScreenState extends State<ManageModelsScreen> {
+class _ManageModelsScreenState extends State<ManageModelsScreen>
+    with WidgetsBindingObserver {
   static const String _customModelsPrefsKey = 'custom_hf_models_v1';
 
   final ModelService _modelService = ModelService();
@@ -42,8 +43,11 @@ class _ManageModelsScreenState extends State<ManageModelsScreen> {
   );
   final List<DownloadableModel> _customModels = <DownloadableModel>[];
 
-  final Map<String, double> _downloadProgress = {};
-  final Map<String, bool> _isDownloading = {};
+  final Map<String, ValueNotifier<_ModelDownloadUiState>>
+  _downloadUiStateByFile = {};
+  final Map<String, int> _lastDownloadedBytes = {};
+  final Map<String, DateTime> _lastDownloadSampleAt = {};
+  final Map<String, double> _smoothedDownloadRateBytesPerSec = {};
   final Map<String, CancelToken> _cancelTokens = {};
 
   Set<String> _downloadedFiles = {};
@@ -56,8 +60,21 @@ class _ManageModelsScreenState extends State<ManageModelsScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _showModelLibrary = false;
     _initModelService();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (kIsWeb) {
+      return;
+    }
+
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      _pauseActiveDownloads('App moved to background');
+    }
   }
 
   Future<void> _initModelService() async {
@@ -429,35 +446,212 @@ class _ManageModelsScreenState extends State<ManageModelsScreen> {
     return value.toString();
   }
 
+  String _downloadStageLabel(ModelDownloadProgress detail) {
+    final actionText = detail.resumed ? 'Resuming' : 'Downloading';
+    final stageText = switch (detail.stage) {
+      ModelDownloadStage.model => '$actionText model',
+      ModelDownloadStage.multimodalProjector => '$actionText mmproj',
+    };
+
+    if (detail.stageCount > 1) {
+      return '$stageText (${detail.stageIndex}/${detail.stageCount})';
+    }
+    return stageText;
+  }
+
+  String _downloadFailureMessage(dynamic error) {
+    if (error is DioException) {
+      final normalized = '${error.message ?? ''} ${error.error ?? ''}'
+          .toLowerCase();
+      final statusCode = error.response?.statusCode;
+
+      if (error.type == DioExceptionType.connectionError) {
+        final looksLikeDnsFailure =
+            normalized.contains('failed host lookup') ||
+            normalized.contains('no address associated with hostname') ||
+            normalized.contains('socketexception');
+        if (looksLikeDnsFailure) {
+          return 'Cannot reach Hugging Face. Check internet, DNS/Private DNS, VPN, or ad blocker.';
+        }
+        return 'Network connection error while downloading. Please check your internet and retry.';
+      }
+
+      if (error.type == DioExceptionType.connectionTimeout ||
+          error.type == DioExceptionType.sendTimeout ||
+          error.type == DioExceptionType.receiveTimeout) {
+        return 'Download timed out. Please retry on a stable connection.';
+      }
+
+      if (error.type == DioExceptionType.badResponse && statusCode != null) {
+        return 'Download failed (HTTP $statusCode). Please retry.';
+      }
+    }
+
+    return 'Download failed. Please retry.';
+  }
+
+  void _updateDownloadRate(String filename, ModelDownloadProgress detail) {
+    final now = DateTime.now();
+    final previousBytes = _lastDownloadedBytes[filename];
+    final previousSampleAt = _lastDownloadSampleAt[filename];
+
+    if (previousBytes != null && previousSampleAt != null) {
+      final elapsedMs = now.difference(previousSampleAt).inMilliseconds;
+      final deltaBytes = detail.downloadedBytes - previousBytes;
+      if (elapsedMs > 0 && deltaBytes > 0) {
+        final instantRate = (deltaBytes * 1000.0) / elapsedMs;
+        final previousRate = _smoothedDownloadRateBytesPerSec[filename];
+        _smoothedDownloadRateBytesPerSec[filename] = previousRate == null
+            ? instantRate
+            : ((previousRate * 0.72) + (instantRate * 0.28));
+      }
+    }
+
+    _lastDownloadedBytes[filename] = detail.downloadedBytes;
+    _lastDownloadSampleAt[filename] = now;
+  }
+
+  String? _downloadTransferLabel(
+    String filename,
+    ModelDownloadProgress detail,
+  ) {
+    final bytesPerSecond = _smoothedDownloadRateBytesPerSec[filename];
+    if (bytesPerSecond == null || bytesPerSecond <= 0) {
+      return null;
+    }
+
+    final speedLabel = _formatByteRate(bytesPerSecond);
+    final totalBytes = detail.totalBytes;
+    if (totalBytes == null || totalBytes <= 0) {
+      return speedLabel;
+    }
+
+    final remainingBytes = totalBytes - detail.downloadedBytes;
+    if (remainingBytes <= 0) {
+      return speedLabel;
+    }
+
+    final etaSeconds = (remainingBytes / bytesPerSecond).ceil();
+    final etaLabel = _formatEta(Duration(seconds: etaSeconds));
+    return '$speedLabel | $etaLabel left';
+  }
+
+  String _formatByteRate(double bytesPerSecond) {
+    if (bytesPerSecond >= 1024 * 1024 * 1024) {
+      return '${(bytesPerSecond / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB/s';
+    }
+    if (bytesPerSecond >= 1024 * 1024) {
+      return '${(bytesPerSecond / (1024 * 1024)).toStringAsFixed(2)} MB/s';
+    }
+    if (bytesPerSecond >= 1024) {
+      return '${(bytesPerSecond / 1024).toStringAsFixed(1)} KB/s';
+    }
+    return '${bytesPerSecond.toStringAsFixed(0)} B/s';
+  }
+
+  String _formatEta(Duration duration) {
+    if (duration.inHours > 0) {
+      final minutes = duration.inMinutes
+          .remainder(60)
+          .toString()
+          .padLeft(2, '0');
+      return '${duration.inHours}h ${minutes}m';
+    }
+    if (duration.inMinutes > 0) {
+      final seconds = duration.inSeconds
+          .remainder(60)
+          .toString()
+          .padLeft(2, '0');
+      return '${duration.inMinutes}m ${seconds}s';
+    }
+    return '${duration.inSeconds}s';
+  }
+
+  ValueNotifier<_ModelDownloadUiState> _downloadUiStateFor(String filename) {
+    return _downloadUiStateByFile.putIfAbsent(
+      filename,
+      () => ValueNotifier<_ModelDownloadUiState>(const _ModelDownloadUiState()),
+    );
+  }
+
+  void _updateDownloadUiState(
+    String filename, {
+    bool? isDownloading,
+    double? progress,
+    ModelDownloadProgress? detail,
+    bool clearDetail = false,
+    bool clearProgress = false,
+  }) {
+    final notifier = _downloadUiStateFor(filename);
+    final current = notifier.value;
+    notifier.value = current.copyWith(
+      isDownloading: isDownloading,
+      progress: clearProgress ? 0.0 : progress,
+      detail: detail,
+      clearDetail: clearDetail,
+    );
+  }
+
+  void _clearDownloadTracking(String filename) {
+    _lastDownloadedBytes.remove(filename);
+    _lastDownloadSampleAt.remove(filename);
+    _smoothedDownloadRateBytesPerSec.remove(filename);
+  }
+
+  void _pauseActiveDownloads(String reason) {
+    final entries = _cancelTokens.entries.toList(growable: false);
+    for (final entry in entries) {
+      final token = entry.value;
+      if (!token.isCancelled) {
+        token.cancel(reason);
+      }
+    }
+  }
+
   Future<void> _downloadModel(DownloadableModel model) async {
     if (!kIsWeb && _modelsDir == null) {
       return;
     }
 
     final cancelToken = CancelToken();
-    setState(() {
-      _isDownloading[model.filename] = true;
-      _downloadProgress[model.filename] = 0.0;
-      _cancelTokens[model.filename] = cancelToken;
-    });
+    _updateDownloadUiState(
+      model.filename,
+      isDownloading: true,
+      clearDetail: true,
+    );
+    _lastDownloadedBytes.remove(model.filename);
+    _lastDownloadSampleAt.remove(model.filename);
+    _smoothedDownloadRateBytesPerSec.remove(model.filename);
+    _cancelTokens[model.filename] = cancelToken;
 
     await _modelService.downloadModel(
       model: model,
       modelsDir: _modelsDir ?? '',
       cancelToken: cancelToken,
-      onProgress: (progress) {
-        if (!mounted) return;
-        setState(() {
-          _downloadProgress[model.filename] = progress;
-        });
+      onProgress: (_) {},
+      onProgressDetail: (detail) {
+        if (!mounted) {
+          return;
+        }
+        _updateDownloadRate(model.filename, detail);
+        _updateDownloadUiState(
+          model.filename,
+          progress: detail.overallProgress,
+          detail: detail,
+        );
       },
       onSuccess: (filename) {
         if (!mounted) return;
+        _updateDownloadUiState(
+          model.filename,
+          isDownloading: false,
+          clearProgress: true,
+          clearDetail: true,
+        );
+        _clearDownloadTracking(model.filename);
+        _cancelTokens.remove(model.filename);
         setState(() {
           _downloadedFiles.add(filename);
-          _isDownloading[model.filename] = false;
-          _downloadProgress.remove(model.filename);
-          _cancelTokens.remove(model.filename);
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('${model.name} downloaded successfully.')),
@@ -465,23 +659,25 @@ class _ManageModelsScreenState extends State<ManageModelsScreen> {
       },
       onError: (error) {
         if (!mounted) return;
-        setState(() {
-          _isDownloading[model.filename] = false;
-          if (!(error is DioException &&
-              error.type == DioExceptionType.cancel)) {
-            _downloadProgress.remove(model.filename);
-          }
-          _cancelTokens.remove(model.filename);
-        });
-
         final isCancel =
             error is DioException && error.type == DioExceptionType.cancel;
+        _updateDownloadUiState(
+          model.filename,
+          isDownloading: false,
+          clearDetail: !isCancel,
+          clearProgress: !isCancel,
+        );
+        if (!isCancel) {
+          _clearDownloadTracking(model.filename);
+        }
+        _cancelTokens.remove(model.filename);
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
               isCancel
                   ? 'Download paused: ${model.name}'
-                  : 'Download failed: $error',
+                  : _downloadFailureMessage(error),
             ),
           ),
         );
@@ -548,17 +744,24 @@ class _ManageModelsScreenState extends State<ManageModelsScreen> {
   Future<void> _deleteModel(DownloadableModel model) async {
     if (_modelsDir == null) return;
 
-    if (_isDownloading[model.filename] == true) {
+    if (_downloadUiStateFor(model.filename).value.isDownloading) {
       _cancelDownload(model);
     }
 
     await _modelService.deleteModel(_modelsDir!, model);
     if (!mounted) return;
 
+    _updateDownloadUiState(
+      model.filename,
+      isDownloading: false,
+      clearProgress: true,
+      clearDetail: true,
+    );
+    _clearDownloadTracking(model.filename);
+    _cancelTokens.remove(model.filename);
+
     setState(() {
       _downloadedFiles.remove(model.filename);
-      _downloadProgress.remove(model.filename);
-      _isDownloading[model.filename] = false;
     });
   }
 
@@ -614,8 +817,13 @@ class _ManageModelsScreenState extends State<ManageModelsScreen> {
       ..clear()
       ..addAll(DownloadableModel.defaultModels);
     _customModels.clear();
-    _downloadProgress.clear();
-    _isDownloading.clear();
+    for (final notifier in _downloadUiStateByFile.values) {
+      notifier.dispose();
+    }
+    _downloadUiStateByFile.clear();
+    _lastDownloadedBytes.clear();
+    _lastDownloadSampleAt.clear();
+    _smoothedDownloadRateBytesPerSec.clear();
     _cancelTokens.clear();
     _downloadedFiles = await _modelService.getDownloadedModels(_models);
 
@@ -913,90 +1121,111 @@ class _ManageModelsScreenState extends State<ManageModelsScreen> {
                                   ? '${_modelsDir!}/${model.filename}'
                                   : '');
                         final isActivating = _activatingModel == model.filename;
-
-                        final card = ModelCard(
-                          model: model,
-                          isDownloaded: _downloadedFiles.contains(
-                            model.filename,
-                          ),
-                          isDownloading:
-                              _isDownloading[model.filename] ?? false,
-                          progress: _downloadProgress[model.filename] ?? 0.0,
-                          isWeb: kIsWeb,
-                          isSelected: provider.modelPath == selectedPath,
-                          gpuLayers: provider.gpuLayers,
-                          contextSize: provider.contextSize,
-                          onGpuLayersChanged: provider.updateGpuLayers,
-                          onContextSizeChanged: provider.updateContextSize,
-                          onSelect: isActivating
-                              ? () {}
-                              : () => unawaited(_selectModel(model)),
-                          onDownload: () => unawaited(_downloadModel(model)),
-                          onDelete: () => unawaited(_deleteModel(model)),
-                          onCancel: () => _cancelDownload(model),
+                        final downloadStateListenable = _downloadUiStateFor(
+                          model.filename,
                         );
 
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 14),
-                          child: Stack(
-                            children: [
-                              card,
-                              if (isActivating)
-                                Positioned.fill(
-                                  child: DecoratedBox(
-                                    decoration: BoxDecoration(
-                                      color: Colors.black.withValues(
-                                        alpha: 0.35,
-                                      ),
-                                      borderRadius: BorderRadius.circular(20),
+                        return ValueListenableBuilder<_ModelDownloadUiState>(
+                          valueListenable: downloadStateListenable,
+                          builder: (context, downloadState, _) {
+                            final detail = downloadState.detail;
+
+                            final card = ModelCard(
+                              model: model,
+                              isDownloaded: _downloadedFiles.contains(
+                                model.filename,
+                              ),
+                              isDownloading: downloadState.isDownloading,
+                              progress: downloadState.progress,
+                              downloadStatusLabel: detail == null
+                                  ? null
+                                  : _downloadStageLabel(detail),
+                              downloadTransferLabel: detail == null
+                                  ? null
+                                  : _downloadTransferLabel(
+                                      model.filename,
+                                      detail,
                                     ),
-                                    child: Center(
-                                      child: Container(
-                                        width: 210,
-                                        padding: const EdgeInsets.all(12),
+                              isWeb: kIsWeb,
+                              isSelected: provider.modelPath == selectedPath,
+                              gpuLayers: provider.gpuLayers,
+                              contextSize: provider.contextSize,
+                              onGpuLayersChanged: provider.updateGpuLayers,
+                              onContextSizeChanged: provider.updateContextSize,
+                              onSelect: isActivating
+                                  ? () {}
+                                  : () => unawaited(_selectModel(model)),
+                              onDownload: () =>
+                                  unawaited(_downloadModel(model)),
+                              onDelete: () => unawaited(_deleteModel(model)),
+                              onCancel: () => _cancelDownload(model),
+                            );
+
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 14),
+                              child: Stack(
+                                children: [
+                                  card,
+                                  if (isActivating)
+                                    Positioned.fill(
+                                      child: DecoratedBox(
                                         decoration: BoxDecoration(
                                           color: Colors.black.withValues(
-                                            alpha: 0.45,
+                                            alpha: 0.35,
                                           ),
                                           borderRadius: BorderRadius.circular(
-                                            14,
-                                          ),
-                                          border: Border.all(
-                                            color: Colors.white.withValues(
-                                              alpha: 0.16,
-                                            ),
+                                            20,
                                           ),
                                         ),
-                                        child: Column(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Text(
-                                              hasLoadProgress
-                                                  ? 'Loading ${loadProgressLabel!}'
-                                                  : 'Loading model...',
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .bodySmall
-                                                  ?.copyWith(
-                                                    color: Colors.white,
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
+                                        child: Center(
+                                          child: Container(
+                                            width: 210,
+                                            padding: const EdgeInsets.all(12),
+                                            decoration: BoxDecoration(
+                                              color: Colors.black.withValues(
+                                                alpha: 0.45,
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(14),
+                                              border: Border.all(
+                                                color: Colors.white.withValues(
+                                                  alpha: 0.16,
+                                                ),
+                                              ),
                                             ),
-                                            const SizedBox(height: 8),
-                                            LinearProgressIndicator(
-                                              value: hasLoadProgress
-                                                  ? provider.loadingProgress
-                                                  : null,
-                                              minHeight: 6,
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Text(
+                                                  hasLoadProgress
+                                                      ? 'Loading ${loadProgressLabel!}'
+                                                      : 'Loading model...',
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .bodySmall
+                                                      ?.copyWith(
+                                                        color: Colors.white,
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                      ),
+                                                ),
+                                                const SizedBox(height: 8),
+                                                LinearProgressIndicator(
+                                                  value: hasLoadProgress
+                                                      ? provider.loadingProgress
+                                                      : null,
+                                                  minHeight: 6,
+                                                ),
+                                              ],
                                             ),
-                                          ],
+                                          ),
                                         ),
                                       ),
                                     ),
-                                  ),
-                                ),
-                            ],
-                          ),
+                                ],
+                              ),
+                            );
+                          },
                         );
                       }),
                   ],
@@ -1420,7 +1649,7 @@ class _ManageModelsScreenState extends State<ManageModelsScreen> {
     return BackendUtils.availableBackends(
       devices: provider.availableDevices,
       activeBackend: provider.activeBackend,
-      includeAutoOnWeb: kIsWeb,
+      includeAutoOnWeb: true,
     );
   }
 
@@ -1450,6 +1679,45 @@ class _ManageModelsScreenState extends State<ManageModelsScreen> {
       LlamaLogLevel.info => 'Info',
       LlamaLogLevel.debug => 'Debug',
     };
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _pauseActiveDownloads('Model manager disposed');
+    for (final notifier in _downloadUiStateByFile.values) {
+      notifier.dispose();
+    }
+    _downloadUiStateByFile.clear();
+    super.dispose();
+  }
+}
+
+class _ModelDownloadUiState {
+  final bool isDownloading;
+  final double progress;
+  final ModelDownloadProgress? detail;
+
+  const _ModelDownloadUiState({
+    this.isDownloading = false,
+    this.progress = 0.0,
+    this.detail,
+  });
+
+  _ModelDownloadUiState copyWith({
+    bool? isDownloading,
+    double? progress,
+    ModelDownloadProgress? detail,
+    bool clearDetail = false,
+  }) {
+    final normalizedProgress =
+        ((progress ?? this.progress).clamp(0.0, 1.0) as num).toDouble();
+
+    return _ModelDownloadUiState(
+      isDownloading: isDownloading ?? this.isDownloading,
+      progress: normalizedProgress,
+      detail: clearDetail ? null : (detail ?? this.detail),
+    );
   }
 }
 

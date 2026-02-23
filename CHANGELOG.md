@@ -1,3 +1,16 @@
+## Unreleased
+
+*   **Example app performance and UX polish**:
+    *   Reduced settings-write overhead during frequent parameter adjustments.
+    *   Improved model manager responsiveness during download progress updates.
+    *   Smoothed chat streaming auto-follow and rendering to reduce unnecessary UI work.
+*   **Web model handling improvements**:
+    *   Updated web "Download" behavior to verify remote model/mmproj availability without pre-buffering large GGUF payloads in app memory.
+    *   Clarified that web cache population occurs when a model is first loaded.
+*   **Stability and quality**:
+    *   Added safe fallback handling for invalid persisted log-level settings.
+    *   Added regression tests for persisted settings fallback behavior.
+
 ## 0.6.2
 
 *   **Native inference performance improvements**:

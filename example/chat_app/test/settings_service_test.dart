@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:llamadart/llamadart.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:llamadart_chat_example/models/chat_settings.dart';
@@ -26,6 +27,35 @@ void main() {
       final settings = await service.loadSettings();
 
       expect(settings.toolsEnabled, isFalse);
+    });
+
+    test('defaults preferred backend to auto', () async {
+      final service = SettingsService();
+      final settings = await service.loadSettings();
+
+      expect(settings.preferredBackend, GpuBackend.auto);
+    });
+
+    test('falls back to auto for invalid backend index', () async {
+      SharedPreferences.setMockInitialValues({'preferred_backend': 999});
+
+      final service = SettingsService();
+      final settings = await service.loadSettings();
+
+      expect(settings.preferredBackend, GpuBackend.auto);
+    });
+
+    test('falls back to defaults for invalid log level indices', () async {
+      SharedPreferences.setMockInitialValues({
+        'log_level': 999,
+        'native_log_level': -1,
+      });
+
+      final service = SettingsService();
+      final settings = await service.loadSettings();
+
+      expect(settings.logLevel, LlamaLogLevel.none);
+      expect(settings.nativeLogLevel, LlamaLogLevel.warn);
     });
 
     test('normalizes invalid legacy context size values', () async {

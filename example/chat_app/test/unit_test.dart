@@ -405,7 +405,7 @@ void main() {
     });
 
     test(
-      'fallback estimation does not force cpu layers when metal backend exists',
+      'auto backend keeps preference while runtime backend is detected',
       () async {
         final engine = _MacFallbackEstimateEngine();
         final customProvider = ChatProvider(
@@ -420,6 +420,30 @@ void main() {
 
         await customProvider.loadModel();
 
+        expect(customProvider.settings.gpuLayers, 32);
+        expect(customProvider.settings.preferredBackend, GpuBackend.auto);
+        expect(customProvider.activeBackend, 'METAL');
+      },
+    );
+
+    test(
+      'reload keeps gpu layers when backend is explicitly selected',
+      () async {
+        final customProvider = ChatProvider(
+          chatService: mockChatService,
+          settingsService: mockSettingsService,
+          initialSettings: const ChatSettings(
+            modelPath: 'test_model.gguf',
+            gpuLayers: 32,
+            preferredBackend: GpuBackend.metal,
+          ),
+        );
+
+        await customProvider.loadModel();
+        expect(customProvider.settings.gpuLayers, 32);
+
+        await customProvider.unloadModel();
+        await customProvider.loadModel();
         expect(customProvider.settings.gpuLayers, 32);
         expect(customProvider.settings.preferredBackend, GpuBackend.metal);
       },
