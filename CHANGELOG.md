@@ -1,3 +1,9 @@
+## Unreleased
+
+* **Package metadata cleanup**:
+  * Removed unused Flutter-only constraints/dependencies from the root `pubspec.yaml` (`environment.flutter`, `flutter`, `path_provider`, `json_rpc_2`, `integration_test`) to keep the core package pure Dart.
+  * Kept Flutter-specific dependencies scoped to Flutter example apps.
+
 ## 0.6.3
 
 * **Native runtime sync (llama.cpp b8138)**:
