@@ -6,6 +6,13 @@ For canonical full release notes, use:
 
 - [`CHANGELOG.md`](https://github.com/leehack/llamadart/blob/main/CHANGELOG.md)
 
+## 0.6.3
+
+- Example app performance/UX polish and web model handling improvements.
+- Added `example/tui_coding_agent`, a terminal coding agent example with
+  default stable text-protocol tool mode.
+- Added persisted settings log-level fallback handling with regression tests.
+
 ## 0.6.2
 
 - Native inference performance improvements (request overhead, stream batching,
