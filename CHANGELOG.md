@@ -1,5 +1,10 @@
 ## 0.6.3
 
+* **Native runtime sync (llama.cpp b8138)**:
+  * Synced bundled native runtime/assets and regenerated bindings from
+        `b8099` to `b8138`.
+  * Pulled in Android arm64 ISA compatibility hardening (including STLUR
+        guard changes) to prevent launch-time crashes on older devices.
 * **Example app performance and UX polish**:
   * Reduced settings-write overhead during frequent parameter adjustments.
   * Improved model manager responsiveness during download progress updates.

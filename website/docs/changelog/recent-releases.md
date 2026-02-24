@@ -8,6 +8,8 @@ For canonical full release notes, use:
 
 ## 0.6.3
 
+- Synced native runtime to llama.cpp `b8138` and picked up Android arm64
+  crash/compatibility hardening.
 - Example app performance/UX polish and web model handling improvements.
 - Added `example/tui_coding_agent`, a terminal coding agent example with
   default stable text-protocol tool mode.
