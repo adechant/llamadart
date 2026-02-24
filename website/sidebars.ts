@@ -61,7 +61,8 @@ const sidebars: SidebarsConfig = {
         'examples/basic-app',
         'examples/chat-app',
         'examples/llamadart-cli',
-        'examples/llamadart-server'
+        'examples/llamadart-server',
+        'examples/tui-coding-agent'
       ]
     },
     {
