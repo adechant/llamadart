@@ -12,6 +12,10 @@ await engine.loadModel('/path/to/model.gguf');
 await engine.loadMultimodalProjector('/path/to/mmproj.gguf');
 ```
 
+Projector offload follows effective model-load configuration. If model loading
+is CPU-only (`preferredBackend: GpuBackend.cpu` or `gpuLayers: 0`), projector
+initialization also runs CPU-only.
+
 ## Build multimodal message
 
 ```dart
