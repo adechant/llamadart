@@ -378,17 +378,30 @@ class ChatProvider extends ChangeNotifier {
       );
     }
 
-    String? backendInfo;
+    String? availableBackendInfo;
+    String? activeBackendInfo;
     try {
-      backendInfo = await _chatService.engine.getBackendName();
+      availableBackendInfo = await _chatService.engine.getAvailableBackends();
     } catch (e) {
-      debugPrint("Error fetching devices: $e");
+      debugPrint("Error fetching available backends: $e");
     }
 
-    if (backendInfo != null) {
-      _availableDevices = BackendUtils.parseBackendDevices(backendInfo);
+    try {
+      activeBackendInfo = await _chatService.engine.getBackendName();
+    } catch (e) {
+      debugPrint("Error fetching active backend: $e");
+    }
+
+    if (availableBackendInfo != null) {
+      _availableDevices = BackendUtils.parseBackendDevices(
+        availableBackendInfo,
+      );
+    }
+
+    final backendInfoForLabel = activeBackendInfo ?? availableBackendInfo;
+    if (backendInfoForLabel != null) {
       _activeBackend = BackendUtils.deriveActiveBackendLabel(
-        backendInfo,
+        backendInfoForLabel,
         preferredBackend: _settings.preferredBackend,
         gpuLayers: _settings.gpuLayers,
       );
@@ -503,13 +516,26 @@ class ChatProvider extends ChangeNotifier {
       );
       updateLoadingUi(0.8);
 
-      final rawBackend = await _chatService.engine.getBackendName();
-      _availableDevices = BackendUtils.parseBackendDevices(rawBackend);
-      _activeBackend = BackendUtils.deriveActiveBackendLabel(
-        rawBackend,
-        preferredBackend: _settings.preferredBackend,
-        gpuLayers: _settings.gpuLayers,
-      );
+      final availableBackendInfo = await _getAvailableBackendInfoBestEffort();
+      if (availableBackendInfo != null) {
+        _availableDevices = BackendUtils.parseBackendDevices(
+          availableBackendInfo,
+        );
+      }
+
+      final activeBackendInfo = await _getBackendInfoBestEffort();
+      final backendInfoForLabel = activeBackendInfo ?? availableBackendInfo;
+      if (backendInfoForLabel != null) {
+        _activeBackend = BackendUtils.deriveActiveBackendLabel(
+          backendInfoForLabel,
+          preferredBackend: _settings.preferredBackend,
+          gpuLayers: _settings.gpuLayers,
+        );
+      } else {
+        _activeBackend = _settings.preferredBackend == GpuBackend.cpu
+            ? 'CPU'
+            : _settings.preferredBackend.name.toUpperCase();
+      }
 
       _contextLimit = await _chatService.engine.getContextSize();
       _supportsVision = await _chatService.engine.supportsVision;
@@ -521,7 +547,9 @@ class ChatProvider extends ChangeNotifier {
       final runtimeDiagnostics = _runtimeProfileService.buildDiagnostics(
         metadata: metadata,
       );
-      _runtimeGpuLayers = runtimeDiagnostics.runtimeGpuLayers;
+      _runtimeGpuLayers =
+          await _getResolvedGpuLayersBestEffort() ??
+          runtimeDiagnostics.runtimeGpuLayers;
       _runtimeThreads = runtimeDiagnostics.runtimeThreads;
 
       _addInfoMessage('Model loaded successfully! Ready to chat.');
@@ -1152,6 +1180,22 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
+  Future<String?> _getAvailableBackendInfoBestEffort() async {
+    try {
+      return await _chatService.engine.getAvailableBackends();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<int?> _getResolvedGpuLayersBestEffort() async {
+    try {
+      return await _chatService.engine.getResolvedGpuLayers();
+    } catch (_) {
+      return null;
+    }
+  }
+
   void updateMmprojPath(String path) {
     _updateSettings(_settings.copyWith(mmprojPath: path));
   }
@@ -1206,7 +1250,7 @@ class ChatProvider extends ChangeNotifier {
   Future<void> estimateDynamicSettings() async {
     try {
       final vram = await _chatService.engine.getVramInfo();
-      final backendInfo = await _getBackendInfoBestEffort();
+      final backendInfo = await _getAvailableBackendInfoBestEffort();
       final estimate = _runtimeProfileService.estimateDynamicSettings(
         totalVramBytes: vram.total,
         freeVramBytes: vram.free,

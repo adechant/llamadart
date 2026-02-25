@@ -17,7 +17,7 @@ import 'interop.dart';
 external JSArray _objectKeys(JSObject obj);
 
 /// Web backend backed by the llama.cpp bridge runtime.
-class WebGpuLlamaBackend implements LlamaBackend {
+class WebGpuLlamaBackend implements LlamaBackend, BackendAvailability {
   static const Duration _bridgeReadyTimeout = Duration(seconds: 12);
   static const Duration _bridgePollInterval = Duration(milliseconds: 100);
 
@@ -948,6 +948,11 @@ class WebGpuLlamaBackend implements LlamaBackend {
       }
     }
     return _usingBridge ? 'WebGPU (Web)' : 'Web Bridge (not loaded)';
+  }
+
+  @override
+  Future<String> getAvailableBackends() async {
+    return getBackendName();
   }
 
   @override

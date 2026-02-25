@@ -138,6 +138,8 @@ class LlamaCppService {
   String? _logLevelFallbackLookupSearchKey;
   _LlamaDartSetLogLevelDart? _llamaDartSetLogLevelFallback;
   LlamaLogLevel _configuredLogLevel = LlamaLogLevel.warn;
+  String _activeBackendName = 'CPU';
+  int _activeResolvedGpuLayers = 0;
   bool _mtmdFallbackLookupAttempted = false;
   bool _mtmdPrimarySymbolsUnavailable = false;
   _MtmdApi? _mtmdFallbackApi;
@@ -151,6 +153,8 @@ class LlamaCppService {
   final Map<int, llama_context_params> _contextParams = {};
   final Map<int, Map<String, _LlamaLoraWrapper>> _loraAdapters = {};
   final Map<int, Map<String, double>> _activeLoras = {};
+  final Map<int, String> _modelBackendNames = <int, String>{};
+  final Map<int, int> _modelResolvedGpuLayers = <int, int>{};
 
   // Mapping: modelHandle -> mtmdContextHandle
   final Map<int, int> _modelToMtmd = {};
@@ -265,15 +269,12 @@ class LlamaCppService {
     llama_backend_init();
     _applyConfiguredLogLevel();
 
-    if (_backendModuleDirectory == null) {
-      _tryLoadAllBackendsBestEffort();
+    // Startup path should remain CPU-safe so reading backend options does not
+    // initialize optional GPU backends.
+    if (_backendModuleDirectory != null) {
+      _tryLoadBackendModuleIfBundled('cpu');
     } else {
-      _tryLoadAllBackendsFromPathBestEffort(_backendModuleDirectory!);
-
-      // Split-module bundles: load CPU and proactively probe optional
-      // backend modules so capability discovery works before first model load.
       _tryLoadBackendModule('cpu');
-      _prepareBackendsForModelLoad(GpuBackend.auto);
     }
 
     if (_backendRegistryOr<int>(0, ggml_backend_reg_count) == 0) {
@@ -839,15 +840,21 @@ class LlamaCppService {
       modelParams.preferredBackend,
     );
     var gpuLayers = resolveGpuLayersForLoad(modelParams);
+    var forcedCpuFallback = false;
 
     final explicitGpuBackend =
         modelParams.preferredBackend != GpuBackend.auto &&
         modelParams.preferredBackend != GpuBackend.cpu;
-    if (explicitGpuBackend && preferredDevices == null) {
+    if (explicitGpuBackend &&
+        preferredDevices == null &&
+        _shouldForceCpuFallbackForMissingPreferredDevices(
+          modelParams.preferredBackend,
+        )) {
       // Honor explicit backend intent: if requested GPU backend is unavailable,
       // fall back to CPU instead of letting another GPU backend auto-select.
       preferredDevices = _createPreferredDeviceList(GpuBackend.cpu);
       gpuLayers = 0;
+      forcedCpuFallback = true;
     }
 
     mparams.n_gpu_layers = gpuLayers;
@@ -877,8 +884,114 @@ class LlamaCppService {
     final handle = _getHandle();
     _models[handle] = _LlamaModelWrapper(modelPtr);
     _loraAdapters[handle] = {};
+    final resolvedBackend = _resolveBackendNameForLoad(
+      requestedBackend: modelParams.preferredBackend,
+      resolvedGpuLayers: gpuLayers,
+      forcedCpuFallback: forcedCpuFallback,
+    );
+    _modelBackendNames[handle] = resolvedBackend;
+    _modelResolvedGpuLayers[handle] = gpuLayers;
+    _activeBackendName = resolvedBackend;
+    _activeResolvedGpuLayers = gpuLayers;
 
     return handle;
+  }
+
+  String _resolveBackendNameForLoad({
+    required GpuBackend requestedBackend,
+    required int resolvedGpuLayers,
+    required bool forcedCpuFallback,
+  }) {
+    if (forcedCpuFallback || resolvedGpuLayers <= 0) {
+      return _backendDisplayName('cpu');
+    }
+
+    final backendInfo = getBackendInfo().join(', ');
+
+    switch (requestedBackend) {
+      case GpuBackend.auto:
+        return _resolveAutoBackendName(backendInfo) ??
+            _backendDisplayName('cpu');
+      case GpuBackend.cpu:
+        return _backendDisplayName('cpu');
+      case GpuBackend.vulkan:
+        return _resolveExplicitBackendName(GpuBackend.vulkan, backendInfo);
+      case GpuBackend.metal:
+        return _resolveExplicitBackendName(GpuBackend.metal, backendInfo);
+      case GpuBackend.cuda:
+        return _resolveExplicitBackendName(GpuBackend.cuda, backendInfo);
+      case GpuBackend.blas:
+        return _resolveExplicitBackendName(GpuBackend.blas, backendInfo);
+      case GpuBackend.opencl:
+        return _resolveExplicitBackendName(GpuBackend.opencl, backendInfo);
+      case GpuBackend.hip:
+        return _resolveExplicitBackendName(GpuBackend.hip, backendInfo);
+    }
+  }
+
+  String _resolveExplicitBackendName(GpuBackend backend, String backendInfo) {
+    if (_backendInfoContainsBackendMarker(backendInfo, backend)) {
+      return _backendDisplayName(backend.name);
+    }
+    return _backendDisplayName('cpu');
+  }
+
+  String? _resolveAutoBackendName(String backendInfo) {
+    const preferredOrder = <GpuBackend>[
+      GpuBackend.metal,
+      GpuBackend.cuda,
+      GpuBackend.hip,
+      GpuBackend.vulkan,
+      GpuBackend.opencl,
+      GpuBackend.blas,
+    ];
+
+    for (final backend in preferredOrder) {
+      if (_backendInfoContainsBackendMarker(backendInfo, backend)) {
+        return _backendDisplayName(backend.name);
+      }
+    }
+
+    return null;
+  }
+
+  bool _shouldForceCpuFallbackForMissingPreferredDevices(
+    GpuBackend requestedBackend,
+  ) {
+    final backendModuleDirectory = _backendModuleDirectory;
+    if (backendModuleDirectory == null) {
+      // Consolidated runtimes (notably Apple) do not expose per-backend
+      // dynamic modules. Missing preferred-device pointers here does not
+      // reliably mean GPU is unavailable.
+      return false;
+    }
+
+    return !_isBackendModuleBundled(requestedBackend.name);
+  }
+
+  static bool _backendInfoContainsBackendMarker(
+    String value,
+    GpuBackend backend,
+  ) {
+    final lower = value.toLowerCase();
+    switch (backend) {
+      case GpuBackend.metal:
+        return lower.contains('metal') || lower.contains('mtl');
+      case GpuBackend.vulkan:
+        return lower.contains('vulkan');
+      case GpuBackend.opencl:
+        return lower.contains('opencl');
+      case GpuBackend.hip:
+        return lower.contains('hip');
+      case GpuBackend.cuda:
+        return lower.contains('cuda');
+      case GpuBackend.blas:
+        return lower.contains('blas');
+      case GpuBackend.cpu:
+        return lower.contains('cpu') || lower.contains('llvm');
+      case GpuBackend.auto:
+        return false;
+    }
   }
 
   void _prepareBackendsForModelLoad(GpuBackend preferredBackend) {
@@ -889,32 +1002,38 @@ class LlamaCppService {
       return;
     }
 
-    final backendModuleDirectory = _backendModuleDirectory;
-    if (backendModuleDirectory != null) {
-      _tryLoadAllBackendsFromPathBestEffort(backendModuleDirectory);
-    }
-
     // Always try CPU first; _tryLoadBackendModule can use either absolute path
     // (when module dir is known) or filename resolution fallback.
     _tryLoadBackendModuleIfBundled('cpu');
 
-    // Probe Vulkan on desktop/mobile platforms where it is commonly provided as
-    // a separate backend module, even if user preference is currently CPU.
-    if (Platform.isAndroid || Platform.isLinux || Platform.isWindows) {
-      _tryLoadBackendModuleIfBundled('vulkan');
+    // Explicit CPU mode must never initialize optional GPU backends.
+    if (preferredBackend == GpuBackend.cpu) {
+      return;
     }
-    if (Platform.isLinux || Platform.isWindows) {
-      _tryLoadBackendModuleIfBundled('blas');
-      _tryLoadBackendModuleIfBundled('cuda');
-    }
-    if (Platform.isLinux) {
-      _tryLoadBackendModuleIfBundled('hip');
-    }
+
+    final backendModuleDirectory = _backendModuleDirectory;
 
     switch (preferredBackend) {
       case GpuBackend.auto:
+        if (backendModuleDirectory == null) {
+          _tryLoadAllBackendsBestEffort();
+        } else {
+          _tryLoadAllBackendsFromPathBestEffort(backendModuleDirectory);
+        }
+
+        if (Platform.isAndroid || Platform.isLinux || Platform.isWindows) {
+          _tryLoadBackendModuleIfBundled('vulkan');
+        }
+        if (Platform.isLinux || Platform.isWindows) {
+          _tryLoadBackendModuleIfBundled('blas');
+          _tryLoadBackendModuleIfBundled('cuda');
+        }
+        if (Platform.isLinux) {
+          _tryLoadBackendModuleIfBundled('hip');
+        }
         return;
       case GpuBackend.vulkan:
+        _tryLoadBackendModuleIfBundled('vulkan');
         return;
       case GpuBackend.metal:
         _tryLoadBackendModuleIfBundled('metal');
@@ -1579,6 +1698,16 @@ class LlamaCppService {
       }
 
       model.dispose();
+    }
+
+    _modelBackendNames.remove(modelHandle);
+    _modelResolvedGpuLayers.remove(modelHandle);
+    if (_modelBackendNames.isEmpty) {
+      _activeBackendName = _backendDisplayName('cpu');
+      _activeResolvedGpuLayers = 0;
+    } else {
+      _activeBackendName = _modelBackendNames.values.last;
+      _activeResolvedGpuLayers = _modelResolvedGpuLayers.values.last;
     }
   }
 
@@ -2609,7 +2738,87 @@ class LlamaCppService {
     }
   }
 
-  /// Returns information about available backend devices.
+  /// Returns the currently active backend name.
+  String getActiveBackendName() {
+    return _activeBackendName;
+  }
+
+  /// Returns resolved GPU layers for the active model load.
+  int? getResolvedGpuLayers() {
+    if (_models.isEmpty) {
+      return null;
+    }
+    return _activeResolvedGpuLayers;
+  }
+
+  /// Returns backend names available for selection.
+  ///
+  /// This path avoids optional GPU backend initialization and is intended for
+  /// settings/selector UIs.
+  List<String> getAvailableBackendInfo() {
+    final available = <String>{};
+    final backendModuleDirectory = _backendModuleDirectory;
+
+    if (backendModuleDirectory != null) {
+      const backendCandidates = <String>[
+        'cpu',
+        'vulkan',
+        'opencl',
+        'metal',
+        'cuda',
+        'hip',
+        'blas',
+      ];
+
+      for (final backend in backendCandidates) {
+        if (_isBackendModuleBundled(backend)) {
+          available.add(_backendDisplayName(backend));
+        }
+      }
+    }
+
+    if (available.isEmpty) {
+      available.addAll(getBackendInfo());
+    }
+
+    if (available.isEmpty) {
+      available.add(_backendDisplayName('cpu'));
+    }
+
+    final ordered = available.toList(growable: false)
+      ..sort((a, b) {
+        final aOrder = _backendDisplaySortKey(a);
+        final bOrder = _backendDisplaySortKey(b);
+        if (aOrder != bOrder) {
+          return aOrder.compareTo(bOrder);
+        }
+        return a.compareTo(b);
+      });
+    return ordered;
+  }
+
+  static int _backendDisplaySortKey(String backendName) {
+    switch (backendName.toUpperCase()) {
+      case 'CPU':
+        return 0;
+      case 'METAL':
+        return 1;
+      case 'VULKAN':
+        return 2;
+      case 'OPENCL':
+        return 3;
+      case 'HIP':
+        return 4;
+      case 'CUDA':
+        return 5;
+      case 'BLAS':
+        return 6;
+      default:
+        return 99;
+    }
+  }
+
+  /// Returns information about currently initialized backend devices.
   List<String> getBackendInfo() {
     final count = _backendRegistryOr<int>(0, ggml_backend_dev_count);
     final devices = <String>{};
@@ -2701,6 +2910,10 @@ class LlamaCppService {
       m.dispose();
     }
     _models.clear();
+    _modelBackendNames.clear();
+    _modelResolvedGpuLayers.clear();
+    _activeBackendName = _backendDisplayName('cpu');
+    _activeResolvedGpuLayers = 0;
     for (final m in _mtmdContexts.values) {
       _mtmdFree(m);
     }

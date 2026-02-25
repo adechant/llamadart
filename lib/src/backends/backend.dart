@@ -120,3 +120,18 @@ abstract class LlamaBackend {
     bool addAssistant = true,
   });
 }
+
+/// Optional backend capability for exposing selectable backend options.
+abstract class BackendAvailability {
+  /// Returns backend options available for user selection.
+  Future<String> getAvailableBackends();
+}
+
+/// Optional backend capability for exposing resolved runtime diagnostics.
+abstract class BackendRuntimeDiagnostics {
+  /// Returns resolved GPU layers used for the active model load.
+  ///
+  /// This value reflects the final layer count passed to native model load
+  /// after backend policy/fallback decisions.
+  Future<int?> getResolvedGpuLayers();
+}

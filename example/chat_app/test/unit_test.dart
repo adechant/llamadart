@@ -693,6 +693,9 @@ class _MacFallbackEstimateEngine extends MockLlamaEngine {
 
   @override
   Future<String> getBackendName() async => 'CPU, METAL';
+
+  @override
+  Future<String> getAvailableBackends() async => 'CPU, METAL';
 }
 
 class _FunctionGemmaRawCallTextEngine extends MockLlamaEngine {

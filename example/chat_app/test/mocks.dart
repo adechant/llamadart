@@ -4,7 +4,7 @@ import 'package:llamadart_chat_example/models/chat_settings.dart';
 import 'package:llamadart_chat_example/services/chat_service.dart';
 import 'package:llamadart_chat_example/services/settings_service.dart';
 
-class MockLlamaBackend implements LlamaBackend {
+class MockLlamaBackend implements LlamaBackend, BackendAvailability {
   @override
   bool get isReady => true;
   @override
@@ -64,6 +64,8 @@ class MockLlamaBackend implements LlamaBackend {
   Future<void> clearLoraAdapters(int contextHandle) async {}
   @override
   Future<String> getBackendName() async => "Mock";
+  @override
+  Future<String> getAvailableBackends() async => "Mock";
   @override
   bool get supportsUrlLoading => false;
   @override
