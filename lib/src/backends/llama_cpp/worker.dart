@@ -130,8 +130,16 @@ void llamaWorkerEntry(SendPort initialSendPort) {
             message.sendPort.send(DoneResponse());
 
           case BackendInfoRequest():
-            final info = service.getBackendInfo();
+            final info = service.getActiveBackendName();
+            message.sendPort.send(BackendInfoResponse(info));
+
+          case AvailableBackendsRequest():
+            final info = service.getAvailableBackendInfo();
             message.sendPort.send(BackendInfoResponse(info.join(", ")));
+
+          case ResolvedGpuLayersRequest():
+            final layers = service.getResolvedGpuLayers();
+            message.sendPort.send(ResolvedGpuLayersResponse(layers));
 
           case GpuSupportRequest():
             final supports = service.getGpuSupport();

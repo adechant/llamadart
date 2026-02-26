@@ -13,7 +13,8 @@ import 'worker.dart';
 LlamaBackend createBackend() => NativeLlamaBackend();
 
 /// Native implementation of [LlamaBackend] using isolates and FFI.
-class NativeLlamaBackend implements LlamaBackend {
+class NativeLlamaBackend
+    implements LlamaBackend, BackendAvailability, BackendRuntimeDiagnostics {
   Isolate? _isolate;
   SendPort? _sendPort;
   final ReceivePort _responsesPort = ReceivePort();
@@ -282,6 +283,26 @@ class NativeLlamaBackend implements LlamaBackend {
     final res = await rp.first;
     rp.close();
     return (res as BackendInfoResponse).name;
+  }
+
+  @override
+  Future<String> getAvailableBackends() async {
+    await _ensureIsolate();
+    final rp = ReceivePort();
+    _sendPort!.send(AvailableBackendsRequest(rp.sendPort));
+    final res = await rp.first;
+    rp.close();
+    return (res as BackendInfoResponse).name;
+  }
+
+  @override
+  Future<int?> getResolvedGpuLayers() async {
+    await _ensureIsolate();
+    final rp = ReceivePort();
+    _sendPort!.send(ResolvedGpuLayersRequest(rp.sendPort));
+    final res = await rp.first;
+    rp.close();
+    return (res as ResolvedGpuLayersResponse).layers;
   }
 
   @override

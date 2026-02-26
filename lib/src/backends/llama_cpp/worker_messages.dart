@@ -157,6 +157,18 @@ class BackendInfoRequest extends WorkerRequest {
   BackendInfoRequest(super.sendPort);
 }
 
+/// Request for available backend options.
+class AvailableBackendsRequest extends WorkerRequest {
+  /// Creates a new [AvailableBackendsRequest].
+  AvailableBackendsRequest(super.sendPort);
+}
+
+/// Request for resolved GPU layers of active model.
+class ResolvedGpuLayersRequest extends WorkerRequest {
+  /// Creates a new [ResolvedGpuLayersRequest].
+  ResolvedGpuLayersRequest(super.sendPort);
+}
+
 /// Request to check for GPU support.
 class GpuSupportRequest extends WorkerRequest {
   /// Creates a new [GpuSupportRequest].
@@ -339,6 +351,15 @@ class GpuSupportResponse {
 
   /// Creates a new [GpuSupportResponse].
   GpuSupportResponse(this.support);
+}
+
+/// Response containing resolved GPU layers.
+class ResolvedGpuLayersResponse {
+  /// Resolved layer count for active model load.
+  final int? layers;
+
+  /// Creates a new [ResolvedGpuLayersResponse].
+  ResolvedGpuLayersResponse(this.layers);
 }
 
 /// Response containing system information.

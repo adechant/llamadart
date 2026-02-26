@@ -136,9 +136,10 @@ Notes:
 - Configurable targets always keep `cpu` bundled as a fallback.
 - Android keeps OpenCL available for opt-in, but defaults to Vulkan.
 - `KleidiAI` and `ZenDNN` are CPU-path optimizations in `llama.cpp`, not standalone backend module files.
-- `example/chat_app` backend settings show runtime-detected backends/devices (what initialized), not only bundled module files.
-- `example/chat_app` no longer exposes an `Auto` selector; it lists concrete detected backends.
-- Legacy saved `Auto` preferences in `example/chat_app` are auto-migrated at runtime.
+- `example/chat_app` backend settings list bundled backend options without forcing optional GPU backend initialization.
+- `example/chat_app` active backend status reflects the effective backend used for model load (for example `CPU` when GPU fallback is applied).
+- `example/chat_app` exposes `Auto` only on web; native selectors list concrete backend options.
+- CPU mode (`preferredBackend: cpu` or effective `gpuLayers == 0`) also disables context-time GPU offload so context creation stays CPU-only.
 - Apple targets are intentionally non-configurable in this hook path and use consolidated native libraries.
 - The native-assets hook refreshes emitted files each build; if you are upgrading from older cached outputs, run `flutter clean` once.
 
@@ -288,6 +289,7 @@ Core abstractions in this package:
 - `LlamaEngine`: orchestrates model lifecycle, generation, and templates.
 - `ChatSession`: stateful helper for chat history and sliding-window context.
 - `LlamaBackend`: platform-agnostic backend interface with native/web routing.
+- Optional runtime diagnostics are exposed through `LlamaEngine` helpers such as `getBackendName()`, `getAvailableBackends()`, and `getResolvedGpuLayers()` when supported by the active backend.
 
 ---
 ## ⚠️ Breaking Changes in 0.6.x
