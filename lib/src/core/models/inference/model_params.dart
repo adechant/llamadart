@@ -7,6 +7,10 @@ import '../config/lora_config.dart';
 /// These parameters affect the initial model loading and context allocation.
 /// Most of these cannot be changed once the model is loaded.
 ///
+/// Context batching fields in this class mirror llama.cpp semantics:
+/// `n_batch` is the logical max decode batch, and `n_ubatch` is the
+/// physical micro-batch size.
+///
 /// Example:
 /// ```dart
 /// final params = ModelParams(
@@ -44,10 +48,16 @@ class ModelParams {
 
   /// Maximum prompt/eval tokens per decode call (n_batch).
   ///
+  /// Mirrors llama.cpp `llama_context_params.n_batch` (logical max batch).
+  /// See also upstream CLI flag `--batch-size`.
+  ///
   /// Set to 0 (or negative) to default to [contextSize].
   final int batchSize;
 
   /// Micro-batch size used by backend schedulers (n_ubatch).
+  ///
+  /// Mirrors llama.cpp `llama_context_params.n_ubatch` (physical max batch).
+  /// See also upstream CLI flag `--ubatch-size`.
   ///
   /// Set to 0 (or negative) to default to [batchSize].
   final int microBatchSize;
