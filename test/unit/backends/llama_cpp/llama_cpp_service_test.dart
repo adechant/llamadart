@@ -35,6 +35,50 @@ void main() {
     });
   });
 
+  group('shouldDisableContextGpuOffload', () {
+    test('disables offload for explicit CPU backend', () {
+      const params = ModelParams(
+        gpuLayers: ModelParams.maxGpuLayers,
+        preferredBackend: GpuBackend.cpu,
+      );
+
+      expect(LlamaCppService.shouldDisableContextGpuOffload(params), isTrue);
+    });
+
+    test('disables offload when effective gpu layers are zero', () {
+      const params = ModelParams(
+        gpuLayers: 0,
+        preferredBackend: GpuBackend.auto,
+      );
+
+      expect(LlamaCppService.shouldDisableContextGpuOffload(params), isTrue);
+    });
+
+    test('keeps offload enabled for non-CPU backend with gpu layers', () {
+      const params = ModelParams(
+        gpuLayers: 12,
+        preferredBackend: GpuBackend.hip,
+      );
+
+      expect(LlamaCppService.shouldDisableContextGpuOffload(params), isFalse);
+    });
+
+    test('honors resolved load-time fallback to zero gpu layers', () {
+      const params = ModelParams(
+        gpuLayers: 32,
+        preferredBackend: GpuBackend.vulkan,
+      );
+
+      expect(
+        LlamaCppService.shouldDisableContextGpuOffload(
+          params,
+          resolvedGpuLayers: 0,
+        ),
+        isTrue,
+      );
+    });
+  });
+
   group('resolveMtmdUseGpuForLoad', () {
     test('forces CPU mode to disable projector GPU offload', () {
       const params = ModelParams(

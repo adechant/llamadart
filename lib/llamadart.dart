@@ -37,7 +37,8 @@ export 'src/core/template/chat_template_engine.dart' show ChatTemplateEngine;
 export 'src/core/template/chat_template_handler.dart' show ChatTemplateHandler;
 
 // Backend (interface only)
-export 'src/backends/backend.dart' show LlamaBackend;
+export 'src/backends/backend.dart'
+    show LlamaBackend, BackendAvailability, BackendRuntimeDiagnostics;
 
 // Models - Inference
 export 'src/core/models/inference/model_params.dart';

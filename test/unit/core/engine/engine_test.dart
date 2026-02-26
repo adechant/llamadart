@@ -3,7 +3,8 @@ import 'dart:convert';
 import 'package:test/test.dart';
 import 'package:llamadart/llamadart.dart';
 
-class MockLlamaBackend implements LlamaBackend {
+class MockLlamaBackend
+    implements LlamaBackend, BackendAvailability, BackendRuntimeDiagnostics {
   MockLlamaBackend({
     this.backendName = 'Mock',
     this.urlLoadingSupported = false,
@@ -12,6 +13,7 @@ class MockLlamaBackend implements LlamaBackend {
   bool _isReady = false;
   String? lastLoraPath;
   double? lastLoraScale;
+  int resolvedGpuLayers = 0;
   int modelLoadCalls = 0;
   int modelLoadFromUrlCalls = 0;
   int tokenizeCalls = 0;
@@ -122,6 +124,12 @@ class MockLlamaBackend implements LlamaBackend {
 
   @override
   Future<String> getBackendName() async => backendName;
+
+  @override
+  Future<String> getAvailableBackends() async => backendName;
+
+  @override
+  Future<int?> getResolvedGpuLayers() async => resolvedGpuLayers;
 
   @override
   bool get supportsUrlLoading => urlLoadingSupported;
@@ -712,6 +720,15 @@ void main() {
         await engine.getContextSize(),
         2048,
       ); // From backend.getContextSize
+    });
+
+    test('available backend names', () async {
+      expect(await engine.getAvailableBackends(), 'Mock');
+    });
+
+    test('resolved gpu layers', () async {
+      backend.resolvedGpuLayers = 24;
+      expect(await engine.getResolvedGpuLayers(), 24);
     });
 
     test('LoRA management', () async {

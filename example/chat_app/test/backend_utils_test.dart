@@ -34,6 +34,15 @@ void main() {
 
       expect(
         BackendUtils.deriveActiveBackendLabel(
+          'cpu',
+          preferredBackend: GpuBackend.metal,
+          gpuLayers: 12,
+        ),
+        'CPU',
+      );
+
+      expect(
+        BackendUtils.deriveActiveBackendLabel(
           'webgpu',
           preferredBackend: GpuBackend.auto,
           gpuLayers: 99,

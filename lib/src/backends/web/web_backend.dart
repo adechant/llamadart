@@ -9,7 +9,7 @@ import '../webgpu/webgpu_backend.dart';
 LlamaBackend createBackend() => WebAutoBackend();
 
 /// Uses the unified web backend implementation.
-class WebAutoBackend implements LlamaBackend {
+class WebAutoBackend implements LlamaBackend, BackendAvailability {
   final LlamaBackend _delegate;
 
   /// Creates a web backend router.
@@ -111,6 +111,15 @@ class WebAutoBackend implements LlamaBackend {
   @override
   Future<String> getBackendName() {
     return _delegate.getBackendName();
+  }
+
+  @override
+  Future<String> getAvailableBackends() {
+    final delegate = _delegate;
+    if (delegate is BackendAvailability) {
+      return (delegate as BackendAvailability).getAvailableBackends();
+    }
+    return delegate.getBackendName();
   }
 
   @override

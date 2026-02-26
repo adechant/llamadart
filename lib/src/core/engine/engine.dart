@@ -1005,6 +1005,24 @@ class LlamaEngine {
   /// Returns the name of the active GPU backend.
   Future<String> getBackendName() => backend.getBackendName();
 
+  /// Returns backend options available for user selection.
+  Future<String> getAvailableBackends() {
+    final candidate = backend;
+    if (candidate is BackendAvailability) {
+      return (candidate as BackendAvailability).getAvailableBackends();
+    }
+    return candidate.getBackendName();
+  }
+
+  /// Returns resolved GPU layers for the active model load when available.
+  Future<int?> getResolvedGpuLayers() {
+    final candidate = backend;
+    if (candidate is BackendRuntimeDiagnostics) {
+      return (candidate as BackendRuntimeDiagnostics).getResolvedGpuLayers();
+    }
+    return Future<int?>.value(null);
+  }
+
   /// Returns true if the current hardware and backend support GPU acceleration.
   Future<bool> isGpuSupported() => backend.isGpuSupported();
 

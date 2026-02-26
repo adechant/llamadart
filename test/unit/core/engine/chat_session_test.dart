@@ -4,7 +4,7 @@ import 'dart:typed_data';
 import 'package:test/test.dart';
 import 'package:llamadart/llamadart.dart';
 
-class MockLlamaBackend implements LlamaBackend {
+class MockLlamaBackend implements LlamaBackend, BackendAvailability {
   int _generateCallCount = 0;
   final List<String> _responses = [];
   int contextSize = 2048;
@@ -91,6 +91,8 @@ class MockLlamaBackend implements LlamaBackend {
   Future<void> clearLoraAdapters(int contextHandle) async {}
   @override
   Future<String> getBackendName() async => 'Mock';
+  @override
+  Future<String> getAvailableBackends() async => 'Mock';
   @override
   bool get supportsUrlLoading => false;
   @override

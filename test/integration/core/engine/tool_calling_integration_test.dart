@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:test/test.dart';
 import 'package:llamadart/llamadart.dart';
 
-class MockLlamaBackend implements LlamaBackend {
+class MockLlamaBackend implements LlamaBackend, BackendAvailability {
   bool _isReady = false;
   final List<String> prompts = [];
   final List<GenerationParams> paramsList = [];
@@ -104,6 +104,9 @@ class MockLlamaBackend implements LlamaBackend {
 
   @override
   Future<String> getBackendName() async => 'Mock';
+
+  @override
+  Future<String> getAvailableBackends() async => 'Mock';
 
   @override
   bool get supportsUrlLoading => false;
