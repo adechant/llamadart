@@ -1,5 +1,9 @@
 ## Unreleased
 
+* **Multimodal projector offload alignment**:
+  * Updated native multimodal projector initialization to follow effective model-load configuration.
+  * CPU-only model settings (`preferredBackend: cpu` or `gpuLayers: 0`) now also disable mmproj GPU offload.
+
 * **Package metadata cleanup**:
   * Removed unused Flutter-only constraints/dependencies from the root `pubspec.yaml` (`environment.flutter`, `flutter`, `path_provider`, `json_rpc_2`, `integration_test`) to keep the core package pure Dart.
   * Kept Flutter-specific dependencies scoped to Flutter example apps.

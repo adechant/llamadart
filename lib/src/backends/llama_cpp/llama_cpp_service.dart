@@ -159,6 +159,7 @@ class LlamaCppService {
   // Mapping: modelHandle -> mtmdContextHandle
   final Map<int, int> _modelToMtmd = {};
   final Map<int, Pointer<mtmd_context>> _mtmdContexts = {};
+  final Map<int, bool> _modelToMtmdUseGpu = {};
 
   int _getHandle() => _nextHandle++;
 
@@ -184,6 +185,19 @@ class LlamaCppService {
         resolvedGpuLayers ?? resolveGpuLayersForLoad(modelParams);
     return modelParams.preferredBackend == GpuBackend.cpu ||
         effectiveGpuLayers <= 0;
+  }
+
+  /// Resolves whether multimodal projector init should use GPU.
+  ///
+  /// This follows effective model-load configuration from model loading.
+  static bool resolveMtmdUseGpuForLoad(
+    ModelParams modelParams,
+    int effectiveGpuLayers,
+  ) {
+    return !shouldDisableContextGpuOffload(
+      modelParams,
+      resolvedGpuLayers: effectiveGpuLayers,
+    );
   }
 
   // --- Core Methods ---
@@ -871,6 +885,7 @@ class LlamaCppService {
       gpuLayers = 0;
       forcedCpuFallback = true;
     }
+    final mtmdUseGpu = resolveMtmdUseGpuForLoad(modelParams, gpuLayers);
 
     mparams.n_gpu_layers = gpuLayers;
     mparams.use_mmap = true;
@@ -899,6 +914,7 @@ class LlamaCppService {
     final handle = _getHandle();
     _models[handle] = _LlamaModelWrapper(modelPtr);
     _loraAdapters[handle] = {};
+    _modelToMtmdUseGpu[handle] = mtmdUseGpu;
     final resolvedBackend = _resolveBackendNameForLoad(
       requestedBackend: modelParams.preferredBackend,
       resolvedGpuLayers: gpuLayers,
@@ -1694,6 +1710,7 @@ class LlamaCppService {
   /// This also frees all contexts and LoRA adapters associated with the model.
   void freeModel(int modelHandle) {
     final model = _models.remove(modelHandle);
+    _modelToMtmdUseGpu.remove(modelHandle);
     if (model != null) {
       final contextsToRemove = _contextToModel.entries
           .where((e) => e.value == modelHandle)
@@ -2944,6 +2961,8 @@ class LlamaCppService {
       _mtmdFree(m);
     }
     _mtmdContexts.clear();
+    _modelToMtmd.clear();
+    _modelToMtmdUseGpu.clear();
     // llama_backend_free(); // DISABLED: Prevents race conditions with other isolates
   }
 
@@ -2959,6 +2978,7 @@ class LlamaCppService {
     Pointer<mtmd_context> mmCtx = nullptr;
     try {
       final ctxParams = _mtmdContextParamsDefault();
+      ctxParams.use_gpu = _modelToMtmdUseGpu[modelHandle] ?? true;
       mmCtx = _mtmdInitFromFile(mmProjPathPtr.cast(), model.pointer, ctxParams);
     } finally {
       malloc.free(mmProjPathPtr);
