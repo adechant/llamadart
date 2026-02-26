@@ -42,6 +42,16 @@ class ModelParams {
   /// Set to 0 for automatic detection.
   final int numberOfThreadsBatch;
 
+  /// Maximum prompt/eval tokens per decode call (n_batch).
+  ///
+  /// Set to 0 (or negative) to default to [contextSize].
+  final int batchSize;
+
+  /// Micro-batch size used by backend schedulers (n_ubatch).
+  ///
+  /// Set to 0 (or negative) to default to [batchSize].
+  final int microBatchSize;
+
   /// Maximum number of GPU layers to safely offload all layers.
   static const int maxGpuLayers = 999;
 
@@ -54,6 +64,8 @@ class ModelParams {
     this.chatTemplate,
     this.numberOfThreads = 0,
     this.numberOfThreadsBatch = 0,
+    this.batchSize = 0,
+    this.microBatchSize = 0,
   });
 
   /// Creates a copy of this [ModelParams] with updated fields.
@@ -65,6 +77,8 @@ class ModelParams {
     String? chatTemplate,
     int? numberOfThreads,
     int? numberOfThreadsBatch,
+    int? batchSize,
+    int? microBatchSize,
   }) {
     return ModelParams(
       contextSize: contextSize ?? this.contextSize,
@@ -74,6 +88,8 @@ class ModelParams {
       chatTemplate: chatTemplate ?? this.chatTemplate,
       numberOfThreads: numberOfThreads ?? this.numberOfThreads,
       numberOfThreadsBatch: numberOfThreadsBatch ?? this.numberOfThreadsBatch,
+      batchSize: batchSize ?? this.batchSize,
+      microBatchSize: microBatchSize ?? this.microBatchSize,
     );
   }
 }

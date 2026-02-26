@@ -35,6 +35,74 @@ void main() {
     });
   });
 
+  group('resolveContextBatchSizes', () {
+    test('preserves legacy defaults when batch sizes are unset', () {
+      const params = ModelParams(contextSize: 2048);
+
+      final resolved = LlamaCppService.resolveContextBatchSizes(params, 2048);
+
+      expect(resolved.batchSize, 2048);
+      expect(resolved.microBatchSize, 2048);
+    });
+
+    test('uses explicit batch and micro-batch values', () {
+      const params = ModelParams(
+        contextSize: 4096,
+        batchSize: 512,
+        microBatchSize: 128,
+      );
+
+      final resolved = LlamaCppService.resolveContextBatchSizes(params, 4096);
+
+      expect(resolved.batchSize, 512);
+      expect(resolved.microBatchSize, 128);
+    });
+
+    test('defaults micro-batch to batch when micro-batch is unset', () {
+      const params = ModelParams(contextSize: 4096, batchSize: 384);
+
+      final resolved = LlamaCppService.resolveContextBatchSizes(params, 4096);
+
+      expect(resolved.batchSize, 384);
+      expect(resolved.microBatchSize, 384);
+    });
+
+    test('clamps micro-batch to batch when only micro-batch is oversized', () {
+      const params = ModelParams(contextSize: 1024, microBatchSize: 2048);
+
+      final resolved = LlamaCppService.resolveContextBatchSizes(params, 1024);
+
+      expect(resolved.batchSize, 1024);
+      expect(resolved.microBatchSize, 1024);
+    });
+
+    test('clamps batch sizes to safe bounds', () {
+      const params = ModelParams(
+        contextSize: 512,
+        batchSize: 2048,
+        microBatchSize: 1024,
+      );
+
+      final resolved = LlamaCppService.resolveContextBatchSizes(params, 512);
+
+      expect(resolved.batchSize, 512);
+      expect(resolved.microBatchSize, 512);
+    });
+
+    test('falls back from invalid values to sane minimums', () {
+      const params = ModelParams(
+        contextSize: 0,
+        batchSize: -10,
+        microBatchSize: -20,
+      );
+
+      final resolved = LlamaCppService.resolveContextBatchSizes(params, 0);
+
+      expect(resolved.batchSize, 1);
+      expect(resolved.microBatchSize, 1);
+    });
+  });
+
   group('shouldDisableContextGpuOffload', () {
     test('disables offload for explicit CPU backend', () {
       const params = ModelParams(
