@@ -171,6 +171,21 @@ class LlamaCppService {
         : modelParams.gpuLayers;
   }
 
+  /// Returns whether context-time GPU offload should be disabled.
+  ///
+  /// When CPU mode is selected (or model load resolved to zero GPU layers),
+  /// context-level offload knobs must also be disabled to prevent runtime
+  /// GPU initialization during `llama_init_from_model(...)`.
+  static bool shouldDisableContextGpuOffload(
+    ModelParams modelParams, {
+    int? resolvedGpuLayers,
+  }) {
+    final effectiveGpuLayers =
+        resolvedGpuLayers ?? resolveGpuLayersForLoad(modelParams);
+    return modelParams.preferredBackend == GpuBackend.cpu ||
+        effectiveGpuLayers <= 0;
+  }
+
   // --- Core Methods ---
 
   /// Sets the log level for the Llama.cpp library.
@@ -1731,6 +1746,17 @@ class LlamaCppService {
     ctxParams.n_ubatch = nCtx; // logic from original code
     ctxParams.n_threads = params.numberOfThreads;
     ctxParams.n_threads_batch = params.numberOfThreadsBatch;
+
+    final resolvedModelGpuLayers = _modelResolvedGpuLayers[modelHandle];
+    if (shouldDisableContextGpuOffload(
+      params,
+      resolvedGpuLayers: resolvedModelGpuLayers,
+    )) {
+      ctxParams.offload_kqv = false;
+      ctxParams.op_offload = false;
+      ctxParams.flash_attn_typeAsInt =
+          llama_flash_attn_type.LLAMA_FLASH_ATTN_TYPE_DISABLED.value;
+    }
 
     final ctxPtr = llama_init_from_model(model.pointer, ctxParams);
     if (ctxPtr == nullptr) {

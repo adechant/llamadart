@@ -139,6 +139,7 @@ Notes:
 - `example/chat_app` backend settings list bundled backend options without forcing optional GPU backend initialization.
 - `example/chat_app` active backend status reflects the effective backend used for model load (for example `CPU` when GPU fallback is applied).
 - `example/chat_app` exposes `Auto` only on web; native selectors list concrete backend options.
+- CPU mode (`preferredBackend: cpu` or effective `gpuLayers == 0`) also disables context-time GPU offload so context creation stays CPU-only.
 - Apple targets are intentionally non-configurable in this hook path and use consolidated native libraries.
 - The native-assets hook refreshes emitted files each build; if you are upgrading from older cached outputs, run `flutter clean` once.
 
