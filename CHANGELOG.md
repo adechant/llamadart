@@ -1,4 +1,4 @@
-## Unreleased
+## 0.6.4
 
 * **Multimodal projector offload alignment**:
   * Updated native multimodal projector initialization to follow effective model-load configuration.

@@ -2,6 +2,30 @@
 
 This document covers the major breaking upgrade paths.
 
+## `0.6.3` -> `0.6.4`
+
+No public API break, but Android arm64 native packaging defaults changed.
+
+- Shorthand config such as `android-arm64: [vulkan]` is still supported.
+- If no CPU policy is set, Android arm64 now defaults to
+  `cpu_profile: full` (all CPU variants).
+- If you want smaller baseline-only packaging, set
+  `cpu_profile: compact` explicitly.
+- `cpu_variants: [...]` (when provided) overrides `cpu_profile`.
+
+Example (preserve compact baseline-style packaging):
+
+```yaml
+hooks:
+  user_defines:
+    llamadart:
+      llamadart_native_backends:
+        platforms:
+          android-arm64:
+            backends: [vulkan]
+            cpu_profile: compact
+```
+
 ## `0.5.x` -> `0.6.x`
 
 ### Template routing / handler APIs
