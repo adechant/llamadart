@@ -10,6 +10,7 @@
 * **Backend selection safety and status accuracy**:
   * Added strict CPU-mode behavior in native backend preparation so `preferredBackend: cpu` no longer initializes optional GPU backends during startup/model load probing.
   * Disabled context-time GPU offload knobs (`offload_kqv`, `op_offload`, flash-attention auto path) when effective GPU layers resolve to zero, preventing GPU allocation attempts during context creation in CPU mode.
+  * Added `ModelParams.batchSize` (`n_batch`) and `ModelParams.microBatchSize` (`n_ubatch`) so context batch sizing can be tuned independently from `contextSize` while preserving legacy defaults.
   * Split backend reporting into two semantics: selectable backend options (`getAvailableBackends`) vs active runtime backend (`getBackendName`).
   * Added optional `BackendAvailability` capability and `LlamaEngine.getAvailableBackends()` to support safe settings UIs without forcing GPU initialization.
   * Added optional `BackendRuntimeDiagnostics` capability and `LlamaEngine.getResolvedGpuLayers()` to expose resolved native load-time layer count for runtime diagnostics.
