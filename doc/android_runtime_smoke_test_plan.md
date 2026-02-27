@@ -45,6 +45,25 @@ flutter build apk --release
 adb install -r build/app/outputs/flutter-apk/app-release.apk
 ```
 
+## One-Shot Helper Script
+
+Use the helper to run build/install/log capture in one command:
+
+```bash
+./scripts/android_runtime_smoke.sh --app-id com.example.chat_app
+```
+
+Useful options:
+
+- `--serial <device-serial>`: target a specific connected device.
+- `--activity <activity>`: launch specific activity via `am start`.
+- `--wait-seconds <n>`: adjust log capture window (default `20`).
+- `--skip-clean|--skip-build|--skip-install|--skip-launch`: skip steps when
+  iterating quickly.
+
+The script exits non-zero when crash signatures are detected (`SIGILL`,
+`SIGSEGV`, fatal signals).
+
 ## Smoke Scenario (each config x device)
 
 1. Clear logs:
