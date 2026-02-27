@@ -15,6 +15,18 @@ extension type LlamaWebGpuBridge._(JSObject _) implements JSObject {
     WebGpuLoadModelOptions? options,
   ]);
 
+  /// Prefetches a model URL into browser cache storage.
+  external JSPromise<JSAny?>? prefetchModelToCache(
+    String url, [
+    WebGpuCacheOptions? options,
+  ]);
+
+  /// Evicts a model URL from browser cache storage.
+  external JSPromise<JSAny?>? evictModelFromCache(
+    String url, [
+    WebGpuCacheOptions? options,
+  ]);
+
   /// Generates completion output for a prompt.
   external JSPromise<JSAny?>? createCompletion(
     String prompt, [
@@ -75,8 +87,14 @@ extension type WebGpuBridgeConfig._(JSObject _) implements JSObject {
   /// Creates a config object for the JS bridge.
   external factory WebGpuBridgeConfig({
     JSString? wasmUrl,
+    @JS('wasmUrlMem64') JSString? wasmUrlMem64,
     JSString? workerUrl,
     @JS('coreModuleUrl') JSString? coreModuleUrl,
+    @JS('coreModuleUrlMem64') JSString? coreModuleUrlMem64,
+    bool? preferMemory64,
+    @JS('allowAutoRemoteFetchBackend') bool? allowAutoRemoteFetchBackend,
+    int? remoteFetchThresholdBytes,
+    int? remoteFetchChunkBytes,
     int? logLevel,
     JSObject? logger,
   });
@@ -92,6 +110,23 @@ extension type WebGpuLoadModelOptions._(JSObject _) implements JSObject {
     @JS('nThreads') int? nThreads,
     @JS('nGpuLayers') int? nGpuLayers,
     @JS('useCache') bool? useCache,
+    @JS('forceRemoteFetchBackend') bool? forceRemoteFetchBackend,
+    @JS('remoteFetchThresholdBytes') int? remoteFetchThresholdBytes,
+    @JS('remoteFetchChunkBytes') int? remoteFetchChunkBytes,
+    @JS('modelBytesHint') int? modelBytesHint,
+    @JS('progressCallback') JSFunction? progressCallback,
+  });
+}
+
+/// Cache prefetch/eviction options.
+@JS()
+@anonymous
+extension type WebGpuCacheOptions._(JSObject _) implements JSObject {
+  /// Creates cache options.
+  external factory WebGpuCacheOptions({
+    bool? useCache,
+    bool? force,
+    JSString? cacheName,
     @JS('progressCallback') JSFunction? progressCallback,
   });
 }

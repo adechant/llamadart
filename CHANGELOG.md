@@ -1,5 +1,9 @@
 ## Unreleased
 
+* **Multimodal projector offload alignment**:
+  * Updated native multimodal projector initialization to follow effective model-load configuration.
+  * CPU-only model settings (`preferredBackend: cpu` or `gpuLayers: 0`) now also disable mmproj GPU offload.
+
 * **Package metadata cleanup**:
   * Removed unused Flutter-only constraints/dependencies from the root `pubspec.yaml` (`environment.flutter`, `flutter`, `path_provider`, `json_rpc_2`, `integration_test`) to keep the core package pure Dart.
   * Kept Flutter-specific dependencies scoped to Flutter example apps.
@@ -12,6 +16,19 @@
   * Added optional `BackendRuntimeDiagnostics` capability and `LlamaEngine.getResolvedGpuLayers()` to expose resolved native load-time layer count for runtime diagnostics.
   * Updated `example/chat_app` to populate backend selector options from safe availability discovery while keeping active-backend status bound to effective runtime backend.
   * Improved native auto/explicit backend status resolution to avoid false CPU labeling on Apple consolidated runtimes and false GPU labeling when explicit backend falls back.
+* **Web model cache + large-model UX improvements (chat app)**:
+  * Updated web **Download** flow to prefetch model/mmproj bytes into browser Cache Storage with live progress and cancellation support.
+  * Added best-effort cache eviction for web model delete actions.
+  * Added large-model web load fallback to fetch-backed worker runtime path (bridge) to reduce contiguous `ArrayBuffer` pressure.
+  * Added dedicated web bridge worker entry wiring and worker fallback diagnostics to improve worker startup reliability.
+  * Reduced synthetic load-progress dominance so bridge/network progress appears earlier during web model load.
+  * Added warning-only UI guidance for very large web models that may exceed browser memory limits at load time.
+* **Web model-load resilience**:
+  * Updated `WebGpuLlamaBackend` to retry web model loads with reduced context sizes (and CPU fallback as last attempt) when bridge errors indicate browser memory pressure.
+  * Added bridge config plumbing for optional wasm64 core assets (`llama_webgpu_core_mem64`) with automatic fallback to wasm32 when unsupported.
+  * Added explicit runtime diagnostics and error normalization for worker-thread and cross-origin-isolation requirements in large web model load flows.
+  * Updated default bridge asset pinning in chat app/docs/fetch script to `leehack/llama-web-bridge-assets@v0.1.5`.
+  * Updated HF static chat-app deploy workflow to emit COI `custom_headers` in generated Space README frontmatter.
 
 ## 0.6.3
 

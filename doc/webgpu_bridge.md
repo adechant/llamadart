@@ -19,7 +19,7 @@ pipelines.
 2. CDN fallback:
    `https://cdn.jsdelivr.net/gh/leehack/llama-web-bridge-assets@<tag>/llama_webgpu_bridge.js`
 
-Default pinned tag in the example is `v0.1.4`.
+Default pinned tag in the example is `v0.1.5`.
 
 For broader browser coverage in this repository, fetched/local assets are patched
 to a universal Safari-compatible gate by default (`MIN_SAFARI_VERSION=170400`).
@@ -32,7 +32,7 @@ model bytes.
 To vendor pinned assets into local app web files:
 
 ```bash
-WEBGPU_BRIDGE_ASSETS_TAG=v0.1.4 ./scripts/fetch_webgpu_bridge_assets.sh
+WEBGPU_BRIDGE_ASSETS_TAG=v0.1.5 ./scripts/fetch_webgpu_bridge_assets.sh
 ```
 
 Optional compatibility env vars:
@@ -49,6 +49,36 @@ web backend load options).
 - Subsequent loads of the same URL can be served from cache.
 - Cache behavior/availability depends on browser storage quota and private mode
   policies.
+
+## Large Model Runtime Requirements
+
+Large single-file GGUF loads on web are only reliable when the page is
+cross-origin isolated and the browser can create worker threads.
+
+- Required response headers on the app origin:
+  - `Cross-Origin-Opener-Policy: same-origin`
+  - `Cross-Origin-Embedder-Policy: require-corp` (or `credentialless`)
+- Runtime check: `window.crossOriginIsolated === true`
+- WebGPU must be available for WebGPU inference paths.
+
+Without cross-origin isolation, the bridge can fail with thread-constructor
+errors in fetch-backed loading flows.
+
+### Hugging Face Static Spaces
+
+For `sdk: static`, set custom headers in Space README frontmatter:
+
+```yaml
+custom_headers:
+  cross-origin-embedder-policy: require-corp
+  cross-origin-opener-policy: same-origin
+  cross-origin-resource-policy: cross-origin
+```
+
+Header keys and values must be lowercase in Spaces config.
+
+For `example/chat_app` CI deployment (`.github/workflows/chat_app_hf_static_deploy.yml`),
+these headers are injected automatically into the generated Space README.
 
 ## Browser Compatibility Targets
 
@@ -78,7 +108,7 @@ You can override CDN source/version before the bridge loader runs:
 ```html
 <script>
   window.__llamadartBridgeAssetsRepo = 'leehack/llama-web-bridge-assets';
-  window.__llamadartBridgeAssetsTag = 'v0.1.4';
+  window.__llamadartBridgeAssetsTag = 'v0.1.5';
 </script>
 ```
 
@@ -95,6 +125,8 @@ window.LlamaWebGpuBridge = class LlamaWebGpuBridge {
 `WebGpuLlamaBackend` can use these methods if present:
 
 - `loadModelFromUrl(url, { nCtx, nThreads, nGpuLayers, useCache, progressCallback })`
+- `prefetchModelToCache(url, { useCache, force, cacheName, progressCallback })`
+- `evictModelFromCache(url, { cacheName })`
 - `loadMultimodalProjector(url)`
 - `unloadMultimodalProjector()`
 - `supportsVision()`
@@ -118,3 +150,14 @@ window.LlamaWebGpuBridge = class LlamaWebGpuBridge {
   - preloaded global `window.LlamaWebGpuBridge`, or
   - dynamic import URL via `WebGpuLlamaBackend(bridgeScriptUrl: ...)`.
 - `loadMultimodalProjector` and `supportsVision` / `supportsAudio` are active on web.
+- Large model URL loads may use a worker-thread fetch-backed path in bridge runtimes to reduce contiguous `ArrayBuffer` pressure.
+- Bridge runtimes can optionally provide `llama_webgpu_core_mem64.js/.wasm`; when available and supported by the browser, bridge may prefer wasm64 core and fall back to wasm32 core automatically.
+
+## Performance Tuning Knobs
+
+- `window.__llamadartBridgeEnableMem64` (default effectively on in chat app)
+  - Set to `false` to force wasm32 preference.
+- `window.__llamadartBridgeAllowAutoRemoteFetchBackend`
+  - Default `true`.
+  - Set to `false` to skip the auto fetch-backed pre-attempt and go straight to
+    streamed network staging.

@@ -43,6 +43,9 @@ class ModelCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    const webLargeModelWarningThresholdBytes = 1900 * 1024 * 1024;
+    final showWebLargeModelWarning =
+        isWeb && model.sizeBytes >= webLargeModelWarningThresholdBytes;
 
     return Container(
       decoration: BoxDecoration(
@@ -162,6 +165,29 @@ class ModelCard extends StatelessWidget {
               height: 1.4,
             ),
           ),
+          if (showWebLargeModelWarning) ...[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: Colors.orange.withValues(alpha: 0.35),
+                ),
+              ),
+              child: Text(
+                'Web warning: very large model. Download can succeed, but browser memory limits may still prevent loading.',
+                style: GoogleFonts.outfit(
+                  fontSize: 12,
+                  height: 1.3,
+                  color: colorScheme.onSurface,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           Wrap(
             spacing: 8,
@@ -198,7 +224,8 @@ class ModelCard extends StatelessWidget {
               children: [
                 Text(
                   isDownloading
-                      ? (downloadStatusLabel ?? 'Downloading...')
+                      ? (downloadStatusLabel ??
+                            (isWeb ? 'Caching model...' : 'Downloading...'))
                       : 'Paused',
                   style: TextStyle(
                     fontSize: 12,
@@ -394,7 +421,9 @@ class ModelCard extends StatelessWidget {
                         size: 18,
                       ),
                       label: Text(
-                        progress > 0 ? 'Resume Download' : 'Download',
+                        isWeb
+                            ? (progress > 0 ? 'Resume Cache' : 'Cache Model')
+                            : (progress > 0 ? 'Resume Download' : 'Download'),
                       ),
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),

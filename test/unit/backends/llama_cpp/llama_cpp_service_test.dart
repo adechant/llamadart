@@ -147,6 +147,53 @@ void main() {
     });
   });
 
+  group('resolveMtmdUseGpuForLoad', () {
+    test('forces CPU mode to disable projector GPU offload', () {
+      const params = ModelParams(
+        gpuLayers: ModelParams.maxGpuLayers,
+        preferredBackend: GpuBackend.cpu,
+      );
+
+      expect(LlamaCppService.resolveMtmdUseGpuForLoad(params, 0), isFalse);
+    });
+
+    test(
+      'disables projector GPU offload when effective gpu layers are zero',
+      () {
+        const params = ModelParams(
+          gpuLayers: 0,
+          preferredBackend: GpuBackend.auto,
+        );
+
+        expect(LlamaCppService.resolveMtmdUseGpuForLoad(params, 0), isFalse);
+      },
+    );
+
+    test(
+      'enables projector GPU offload for non-CPU backend with gpu layers',
+      () {
+        const params = ModelParams(
+          gpuLayers: 42,
+          preferredBackend: GpuBackend.vulkan,
+        );
+
+        expect(LlamaCppService.resolveMtmdUseGpuForLoad(params, 42), isTrue);
+      },
+    );
+
+    test(
+      'keeps projector GPU offload disabled after effective CPU fallback',
+      () {
+        const params = ModelParams(
+          gpuLayers: 42,
+          preferredBackend: GpuBackend.vulkan,
+        );
+
+        expect(LlamaCppService.resolveMtmdUseGpuForLoad(params, 0), isFalse);
+      },
+    );
+  });
+
   group('parseBackendModuleDirectoryFromProcMaps', () {
     test('extracts lib directory from standard maps entry', () {
       const maps = '''

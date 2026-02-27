@@ -20,7 +20,7 @@ Web mode uses an external JavaScript bridge runtime consumed by `llamadart`.
 Fetch pinned local assets with:
 
 ```bash
-WEBGPU_BRIDGE_ASSETS_TAG=v0.1.4 ./scripts/fetch_webgpu_bridge_assets.sh
+WEBGPU_BRIDGE_ASSETS_TAG=v0.1.5 ./scripts/fetch_webgpu_bridge_assets.sh
 ```
 
 ## Compatibility and safeguards
@@ -31,6 +31,12 @@ WEBGPU_BRIDGE_ASSETS_TAG=v0.1.4 ./scripts/fetch_webgpu_bridge_assets.sh
 - Legacy bridge assets may be forced to CPU in Safari when GPU layers are
   requested.
 
+Large single-file web model loading requires a cross-origin isolated page:
+
+- `Cross-Origin-Opener-Policy: same-origin`
+- `Cross-Origin-Embedder-Policy: require-corp` (or `credentialless`)
+- Runtime check: `window.crossOriginIsolated === true`
+
 ## Runtime overrides
 
 You can override bridge asset source/version before loader startup:
@@ -38,7 +44,7 @@ You can override bridge asset source/version before loader startup:
 ```html
 <script>
   window.__llamadartBridgeAssetsRepo = 'leehack/llama-web-bridge-assets';
-  window.__llamadartBridgeAssetsTag = 'v0.1.4';
+  window.__llamadartBridgeAssetsTag = 'v0.1.5';
 </script>
 ```
 

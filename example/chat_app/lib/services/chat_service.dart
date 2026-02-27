@@ -33,6 +33,7 @@ class ChatService {
     Timer? syntheticProgressTimer;
     var syntheticProgress = 0.0;
     var emittedProgress = 0.0;
+    var hasObservedModelProgress = false;
 
     void emitProgress(double value) {
       if (onProgress == null) {
@@ -50,10 +51,14 @@ class ChatService {
       syntheticProgressTimer = Timer.periodic(
         const Duration(milliseconds: 160),
         (_) {
+          if (hasObservedModelProgress) {
+            return;
+          }
+
           syntheticProgress =
               (syntheticProgress + (1 - syntheticProgress) * 0.1).clamp(
                 0.0,
-                0.9,
+                0.18,
               );
           emitProgress(syntheticProgress);
         },
@@ -74,6 +79,7 @@ class ChatService {
           onProgress: onProgress == null
               ? null
               : (progress) {
+                  hasObservedModelProgress = true;
                   emitProgress(progress);
                 },
         );
