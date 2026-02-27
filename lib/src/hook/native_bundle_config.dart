@@ -56,6 +56,27 @@ const Map<String, String> _backendAliases = {
   'open-cl': 'opencl',
 };
 
+const String _androidArm64Bundle = 'android-arm64';
+const String _androidCpuProfileCompact = 'compact';
+const String _androidCpuProfileFull = 'full';
+const String _androidCpuProfileDefault = _androidCpuProfileFull;
+
+const List<String> _androidArm64CpuFullVariants = [
+  'android_armv8.0_1',
+  'android_armv8.2_1',
+  'android_armv8.2_2',
+  'android_armv8.6_1',
+  'android_armv9.0_1',
+  'android_armv9.2_1',
+  'android_armv9.2_2',
+];
+
+const List<String> _androidArm64CpuCompactVariants = ['android_armv8.0_1'];
+
+const Map<String, String> _androidCpuVariantAliases = {
+  'baseline': 'android_armv8.0_1',
+};
+
 class NativeBundleSpec {
   final String bundle;
   final bool configurableBackends;
@@ -164,6 +185,41 @@ String canonicalizeBundleKey(String value) {
   return _bundleAliases[normalized] ?? normalized;
 }
 
+Object? _platformConfigValueForBundle({
+  required String bundle,
+  required Object? rawUserConfig,
+}) {
+  final root = _toStringMap(rawUserConfig);
+  if (root == null) {
+    return null;
+  }
+
+  final platformsMap = _extractPlatformsMap(root);
+  if (platformsMap == null) {
+    return null;
+  }
+
+  final canonicalBundle = canonicalizeBundleKey(bundle);
+  for (final entry in platformsMap.entries) {
+    if (canonicalizeBundleKey(entry.key) == canonicalBundle) {
+      return entry.value;
+    }
+  }
+
+  return null;
+}
+
+Map<String, Object?>? _platformConfigMapForBundle({
+  required String bundle,
+  required Object? rawUserConfig,
+}) {
+  final platformValue = _platformConfigValueForBundle(
+    bundle: bundle,
+    rawUserConfig: rawUserConfig,
+  );
+  return _toStringMap(platformValue);
+}
+
 NativeLibraryDescriptor describeNativeLibrary(String filePath) {
   final fileName = path.basename(filePath);
   final canonicalName = _canonicalLibraryName(fileName);
@@ -202,25 +258,10 @@ List<String>? parseRequestedBackends({
   required String bundle,
   required Object? rawUserConfig,
 }) {
-  final root = _toStringMap(rawUserConfig);
-  if (root == null) {
-    return null;
-  }
-
-  final platformsMap = _extractPlatformsMap(root);
-  if (platformsMap == null) {
-    return null;
-  }
-
-  final canonicalBundle = canonicalizeBundleKey(bundle);
-  Object? platformValue;
-  for (final entry in platformsMap.entries) {
-    if (canonicalizeBundleKey(entry.key) == canonicalBundle) {
-      platformValue = entry.value;
-      break;
-    }
-  }
-
+  final platformValue = _platformConfigValueForBundle(
+    bundle: bundle,
+    rawUserConfig: rawUserConfig,
+  );
   if (platformValue == null) {
     return null;
   }
@@ -290,6 +331,182 @@ List<String> selectBackendsForBundle({
   return _ensureCpuBackend(requested, availableBackends);
 }
 
+List<String> _androidCpuVariantsForProfile(String profile) {
+  switch (profile) {
+    case _androidCpuProfileCompact:
+      return _androidArm64CpuCompactVariants;
+    case _androidCpuProfileFull:
+      return _androidArm64CpuFullVariants;
+    default:
+      return _androidArm64CpuFullVariants;
+  }
+}
+
+String _resolveAndroidCpuProfile({
+  required Map<String, Object?> platformConfig,
+  required void Function(String message) warn,
+}) {
+  final raw = platformConfig['cpu_profile'];
+  if (raw == null) {
+    return _androidCpuProfileDefault;
+  }
+
+  if (raw is! String) {
+    warn(
+      'Invalid cpu_profile for $_androidArm64Bundle. '
+      'Expected string (compact/full); defaulting to '
+      '$_androidCpuProfileDefault.',
+    );
+    return _androidCpuProfileDefault;
+  }
+
+  final normalized = raw.trim().toLowerCase().replaceAll('_', '-');
+  if (normalized == _androidCpuProfileCompact ||
+      normalized == _androidCpuProfileFull) {
+    return normalized;
+  }
+
+  warn(
+    'Unknown cpu_profile "$raw" for $_androidArm64Bundle. '
+    'Supported values: compact, full. '
+    'Defaulting to $_androidCpuProfileDefault.',
+  );
+  return _androidCpuProfileDefault;
+}
+
+({List<String> selected, List<String> invalid}) _parseAndroidCpuVariantList(
+  Object? value,
+) {
+  final selected = <String>[];
+  final invalid = <String>[];
+  final tokens = <String>[];
+
+  if (value is String) {
+    tokens.addAll(value.split(','));
+  } else if (value is List<Object?>) {
+    for (final entry in value) {
+      if (entry is String) {
+        tokens.add(entry);
+      } else if (entry != null) {
+        invalid.add(entry.toString());
+      }
+    }
+  } else if (value != null) {
+    invalid.add(value.toString());
+  }
+
+  for (final token in tokens) {
+    final normalized = _normalizeAndroidCpuVariant(token);
+    if (normalized == null) {
+      if (token.trim().isNotEmpty) {
+        invalid.add(token.trim());
+      }
+      continue;
+    }
+    if (!selected.contains(normalized)) {
+      selected.add(normalized);
+    }
+  }
+
+  return (selected: selected, invalid: invalid);
+}
+
+String? _normalizeAndroidCpuVariant(String value) {
+  var normalized = value.trim().toLowerCase();
+  if (normalized.isEmpty) {
+    return null;
+  }
+
+  normalized = normalized.replaceAll(' ', '');
+  normalized = normalized.replaceAll('-', '_');
+  if (normalized.startsWith('libggml_cpu_')) {
+    normalized = normalized.substring('libggml_cpu_'.length);
+  }
+  if (normalized.startsWith('ggml_cpu_')) {
+    normalized = normalized.substring('ggml_cpu_'.length);
+  }
+  if (normalized.endsWith('.so')) {
+    normalized = normalized.substring(0, normalized.length - '.so'.length);
+  }
+
+  if (normalized.startsWith('androidarmv')) {
+    normalized = normalized.replaceFirst('androidarmv', 'android_armv');
+  }
+  if (normalized.startsWith('armv')) {
+    normalized = 'android_$normalized';
+  }
+  if (normalized.startsWith('v')) {
+    normalized = 'android_arm$normalized';
+  }
+
+  final compactMatch = RegExp(
+    r'^android_armv(\d+)_([0-9]+_[0-9]+)$',
+  ).firstMatch(normalized);
+  if (compactMatch != null) {
+    normalized =
+        'android_armv${compactMatch.group(1)}.${compactMatch.group(2)}';
+  }
+
+  normalized = _androidCpuVariantAliases[normalized] ?? normalized;
+  if (_androidArm64CpuFullVariants.contains(normalized)) {
+    return normalized;
+  }
+  return null;
+}
+
+List<String> _resolveAndroidArm64CpuVariants({
+  required Object? rawUserConfig,
+  required void Function(String message) warn,
+}) {
+  final platformConfig = _platformConfigMapForBundle(
+    bundle: _androidArm64Bundle,
+    rawUserConfig: rawUserConfig,
+  );
+
+  if (platformConfig == null) {
+    return _androidCpuVariantsForProfile(_androidCpuProfileDefault);
+  }
+
+  if (platformConfig.containsKey('cpu_variants')) {
+    final parsed = _parseAndroidCpuVariantList(platformConfig['cpu_variants']);
+    if (parsed.invalid.isNotEmpty) {
+      warn(
+        'Ignoring unknown cpu_variants for $_androidArm64Bundle: '
+        '${parsed.invalid.join(', ')}.',
+      );
+    }
+    if (parsed.selected.isNotEmpty) {
+      return parsed.selected;
+    }
+    warn(
+      'No valid cpu_variants were provided for $_androidArm64Bundle. '
+      'Falling back to cpu_profile/default selection.',
+    );
+  }
+
+  final profile = _resolveAndroidCpuProfile(
+    platformConfig: platformConfig,
+    warn: warn,
+  );
+  return _androidCpuVariantsForProfile(profile);
+}
+
+bool _isCpuBackendModule(NativeLibraryDescriptor library) {
+  if (library.isCore || library.backend != 'cpu') {
+    return false;
+  }
+
+  return library.canonicalName == 'ggml-cpu' ||
+      library.canonicalName.startsWith('ggml-cpu-');
+}
+
+String? _androidCpuVariantTagFromCanonicalName(String canonicalName) {
+  if (!canonicalName.startsWith('ggml-cpu-')) {
+    return null;
+  }
+  return canonicalName.substring('ggml-cpu-'.length);
+}
+
 List<NativeLibraryDescriptor> selectLibrariesForBundling({
   required NativeBundleSpec spec,
   required List<NativeLibraryDescriptor> libraries,
@@ -307,7 +524,7 @@ List<NativeLibraryDescriptor> selectLibrariesForBundling({
     warn: warn,
   );
 
-  return libraries
+  final selectedLibraries = libraries
       .where((library) {
         if (library.isCore || library.backend == null) {
           return true;
@@ -315,6 +532,43 @@ List<NativeLibraryDescriptor> selectLibrariesForBundling({
         return selectedBackends.contains(library.backend);
       })
       .toList(growable: false);
+
+  if (spec.bundle != _androidArm64Bundle) {
+    return selectedLibraries;
+  }
+
+  final selectedCpuVariants = _resolveAndroidArm64CpuVariants(
+    rawUserConfig: rawUserConfig,
+    warn: warn,
+  ).toSet();
+
+  final filteredLibraries = selectedLibraries
+      .where((library) {
+        if (!_isCpuBackendModule(library)) {
+          return true;
+        }
+
+        // Keep legacy unsuffixed CPU backend modules when present.
+        final variant = _androidCpuVariantTagFromCanonicalName(
+          library.canonicalName,
+        );
+        if (variant == null) {
+          return true;
+        }
+
+        return selectedCpuVariants.contains(variant);
+      })
+      .toList(growable: false);
+
+  if (filteredLibraries.any(_isCpuBackendModule)) {
+    return filteredLibraries;
+  }
+
+  warn(
+    'No CPU backend module matched Android arm64 cpu profile selection. '
+    'Bundling all available CPU modules instead.',
+  );
+  return selectedLibraries;
 }
 
 String codeAssetNameForLibrary({

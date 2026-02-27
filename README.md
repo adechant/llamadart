@@ -55,7 +55,9 @@ hooks:
     llamadart:
       llamadart_native_backends:
         platforms:
-          android-arm64: [vulkan] # opencl is opt-in
+          android-arm64:
+            backends: [vulkan] # opencl is opt-in
+            cpu_profile: full # default: full; compact keeps baseline only
           linux-x64: [vulkan, cuda]
           windows-x64: [vulkan, cuda]
 ```
@@ -130,11 +132,22 @@ Accepted aliases:
 - `ocl` -> `opencl`
 - `open-cl` -> `opencl`
 
+Android arm64 CPU profile options (`platforms.android-arm64`):
+
+- `cpu_profile: full` (default) bundles all Android ARM CPU variants.
+- `cpu_profile: compact` bundles baseline CPU variant only.
+- `cpu_variants: [...]` (advanced) overrides `cpu_profile` with an exact
+  variant list.
+
 Notes:
 
 - Module availability depends on the pinned native release bundle and may change when the native tag updates.
 - Configurable targets always keep `cpu` bundled as a fallback.
+- Android arm64 defaults to `cpu_profile: full` for best runtime CPU
+  optimization coverage.
 - Android keeps OpenCL available for opt-in, but defaults to Vulkan.
+- Use `cpu_profile: compact` if you prefer smaller Android arm64 package size
+  over CPU-path optimization coverage.
 - `KleidiAI` and `ZenDNN` are CPU-path optimizations in `llama.cpp`, not standalone backend module files.
 - `example/chat_app` backend settings list bundled backend options without forcing optional GPU backend initialization.
 - `example/chat_app` active backend status reflects the effective backend used for model load (for example `CPU` when GPU fallback is applied).

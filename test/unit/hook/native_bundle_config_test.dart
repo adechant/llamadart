@@ -211,6 +211,137 @@ void main() {
     });
   });
 
+  group('android arm64 cpu policy selection', () {
+    final spec = resolveNativeBundleSpec(
+      os: OS.android,
+      arch: Architecture.arm64,
+      isIosSimulator: false,
+    )!;
+
+    final libraries = [
+      describeNativeLibrary('/tmp/libllamadart.so'),
+      describeNativeLibrary('/tmp/libllama.so'),
+      describeNativeLibrary('/tmp/libggml.so'),
+      describeNativeLibrary('/tmp/libggml-base.so'),
+      describeNativeLibrary('/tmp/libggml-vulkan.so'),
+      describeNativeLibrary('/tmp/libggml-cpu-android_armv8.0_1.so'),
+      describeNativeLibrary('/tmp/libggml-cpu-android_armv8.2_1.so'),
+      describeNativeLibrary('/tmp/libggml-cpu-android_armv8.2_2.so'),
+      describeNativeLibrary('/tmp/libggml-cpu-android_armv8.6_1.so'),
+      describeNativeLibrary('/tmp/libggml-cpu-android_armv9.0_1.so'),
+      describeNativeLibrary('/tmp/libggml-cpu-android_armv9.2_1.so'),
+      describeNativeLibrary('/tmp/libggml-cpu-android_armv9.2_2.so'),
+    ];
+
+    test('defaults to full cpu profile when unset', () {
+      final selected = selectLibrariesForBundling(
+        spec: spec,
+        libraries: libraries,
+        rawUserConfig: null,
+        warn: (_) {},
+      );
+
+      final selectedNames = selected.map((item) => item.canonicalName).toSet();
+      expect(selectedNames, contains('ggml-cpu-android_armv8.0_1'));
+      expect(selectedNames, contains('ggml-cpu-android_armv8.2_1'));
+      expect(selectedNames, contains('ggml-cpu-android_armv8.2_2'));
+      expect(selectedNames, contains('ggml-cpu-android_armv8.6_1'));
+      expect(selectedNames, contains('ggml-cpu-android_armv9.0_1'));
+      expect(selectedNames, contains('ggml-cpu-android_armv9.2_1'));
+      expect(selectedNames, contains('ggml-cpu-android_armv9.2_2'));
+    });
+
+    test('compact cpu profile keeps baseline variant only', () {
+      final selected = selectLibrariesForBundling(
+        spec: spec,
+        libraries: libraries,
+        rawUserConfig: {
+          'platforms': {
+            'android-arm64': {'cpu_profile': 'compact'},
+          },
+        },
+        warn: (_) {},
+      );
+
+      final selectedNames = selected.map((item) => item.canonicalName).toSet();
+      expect(selectedNames, contains('ggml-cpu-android_armv8.0_1'));
+      expect(selectedNames, isNot(contains('ggml-cpu-android_armv8.2_1')));
+      expect(selectedNames, isNot(contains('ggml-cpu-android_armv8.2_2')));
+      expect(selectedNames, isNot(contains('ggml-cpu-android_armv8.6_1')));
+      expect(selectedNames, isNot(contains('ggml-cpu-android_armv9.0_1')));
+      expect(selectedNames, isNot(contains('ggml-cpu-android_armv9.2_1')));
+      expect(selectedNames, isNot(contains('ggml-cpu-android_armv9.2_2')));
+    });
+
+    test('cpu_variants override cpu_profile', () {
+      final selected = selectLibrariesForBundling(
+        spec: spec,
+        libraries: libraries,
+        rawUserConfig: {
+          'platforms': {
+            'android-arm64': {
+              'cpu_profile': 'compact',
+              'cpu_variants': ['android_armv8.6_1', 'armv9_2_2'],
+            },
+          },
+        },
+        warn: (_) {},
+      );
+
+      final selectedNames = selected.map((item) => item.canonicalName).toSet();
+      expect(selectedNames, contains('ggml-cpu-android_armv8.6_1'));
+      expect(selectedNames, contains('ggml-cpu-android_armv9.2_2'));
+      expect(selectedNames, isNot(contains('ggml-cpu-android_armv8.0_1')));
+    });
+
+    test('invalid cpu_profile falls back to full profile', () {
+      final warnings = <String>[];
+      final selected = selectLibrariesForBundling(
+        spec: spec,
+        libraries: libraries,
+        rawUserConfig: {
+          'platforms': {
+            'android-arm64': {'cpu_profile': 'balanced'},
+          },
+        },
+        warn: warnings.add,
+      );
+
+      final selectedNames = selected.map((item) => item.canonicalName).toSet();
+      expect(selectedNames, contains('ggml-cpu-android_armv8.0_1'));
+      expect(selectedNames, contains('ggml-cpu-android_armv9.2_2'));
+      expect(
+        warnings.any((warning) => warning.contains('Unknown cpu_profile')),
+        isTrue,
+      );
+    });
+
+    test('invalid cpu_variants fall back to cpu_profile/default selection', () {
+      final warnings = <String>[];
+      final selected = selectLibrariesForBundling(
+        spec: spec,
+        libraries: libraries,
+        rawUserConfig: {
+          'platforms': {
+            'android-arm64': {
+              'cpu_profile': 'compact',
+              'cpu_variants': ['unknown_variant'],
+            },
+          },
+        },
+        warn: warnings.add,
+      );
+
+      final selectedNames = selected.map((item) => item.canonicalName).toSet();
+      expect(selectedNames, contains('ggml-cpu-android_armv8.0_1'));
+      expect(selectedNames, isNot(contains('ggml-cpu-android_armv9.2_2')));
+      expect(
+        warnings.any((warning) => warning.contains('No valid cpu_variants')),
+        isTrue,
+      );
+    });
+  });
+
   group('codeAssetNameForLibrary', () {
     test('maps Windows llama core to primary asset id', () {
       final spec = resolveNativeBundleSpec(

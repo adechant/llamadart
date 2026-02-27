@@ -115,6 +115,16 @@ typedef _MtmdLogSetDart = void Function(ggml_log_callback, Pointer<Void>);
 /// This service handles the direct interaction with the native Llama.cpp library,
 /// including loading models, creating contexts, managing memory, and running inference.
 class LlamaCppService {
+  static const Map<String, int> _androidCpuVariantPriority = <String, int>{
+    'android_armv9.2_2': 0,
+    'android_armv9.2_1': 1,
+    'android_armv9.0_1': 2,
+    'android_armv8.6_1': 3,
+    'android_armv8.2_2': 4,
+    'android_armv8.2_1': 5,
+    'android_armv8.0_1': 6,
+  };
+
   int _nextHandle = 1;
   String? _backendModuleDirectory;
   final Set<String> _loadedBackendModules = <String>{};
@@ -530,24 +540,26 @@ class LlamaCppService {
     }
   }
 
-  void _tryLoadAllBackendsBestEffort() {
+  bool _tryLoadAllBackendsBestEffort() {
     if (_backendLoadAllSymbolUnavailable) {
-      return;
+      return false;
     }
 
     try {
       ggml_backend_load_all();
+      return true;
     } on ArgumentError {
       _resolveGgmlFallbackFunctions();
       final fallback = _ggmlBackendLoadAllFallback;
       if (fallback != null) {
         fallback();
-        return;
+        return true;
       }
 
       // Some split bundles don't expose this symbol on the primary FFI asset.
       // Continue with explicit backend-module loading fallback.
       _backendLoadAllSymbolUnavailable = true;
+      return false;
     }
   }
 
@@ -1032,24 +1044,17 @@ class LlamaCppService {
         _backendModuleDirectory == null) {
       return;
     }
-
-    // Always try CPU first; _tryLoadBackendModule can use either absolute path
-    // (when module dir is known) or filename resolution fallback.
-    _tryLoadBackendModuleIfBundled('cpu');
-
-    // Explicit CPU mode must never initialize optional GPU backends.
-    if (preferredBackend == GpuBackend.cpu) {
-      return;
-    }
-
     final backendModuleDirectory = _backendModuleDirectory;
 
     switch (preferredBackend) {
       case GpuBackend.auto:
-        if (backendModuleDirectory == null) {
-          _tryLoadAllBackendsBestEffort();
-        } else {
-          _tryLoadAllBackendsFromPathBestEffort(backendModuleDirectory);
+        final loadedAll = backendModuleDirectory == null
+            ? _tryLoadAllBackendsBestEffort()
+            : _tryLoadAllBackendsFromPathBestEffort(backendModuleDirectory);
+
+        if (!loadedAll) {
+          // Fallback when load-all symbols are unavailable.
+          _tryLoadBackendModuleIfBundled('cpu');
         }
 
         if (Platform.isAndroid || Platform.isLinux || Platform.isWindows) {
@@ -1063,25 +1068,33 @@ class LlamaCppService {
           _tryLoadBackendModuleIfBundled('hip');
         }
         return;
+      case GpuBackend.cpu:
+        // Explicit CPU mode must not initialize optional GPU backends.
+        _tryLoadBackendModuleIfBundled('cpu');
+        return;
       case GpuBackend.vulkan:
+        _tryLoadBackendModuleIfBundled('cpu');
         _tryLoadBackendModuleIfBundled('vulkan');
         return;
       case GpuBackend.metal:
+        _tryLoadBackendModuleIfBundled('cpu');
         _tryLoadBackendModuleIfBundled('metal');
         return;
       case GpuBackend.cuda:
+        _tryLoadBackendModuleIfBundled('cpu');
         _tryLoadBackendModuleIfBundled('cuda');
         return;
       case GpuBackend.blas:
+        _tryLoadBackendModuleIfBundled('cpu');
         _tryLoadBackendModuleIfBundled('blas');
         return;
       case GpuBackend.opencl:
+        _tryLoadBackendModuleIfBundled('cpu');
         _tryLoadBackendModuleIfBundled('opencl');
         return;
       case GpuBackend.hip:
+        _tryLoadBackendModuleIfBundled('cpu');
         _tryLoadBackendModuleIfBundled('hip');
-        return;
-      case GpuBackend.cpu:
         return;
     }
   }
@@ -1454,8 +1467,41 @@ class LlamaCppService {
       backendModuleDirectory,
       _backendLibraryPattern(backend),
     );
+    if (backend == 'cpu' && Platform.isAndroid) {
+      dynamicNames.sort(_compareAndroidCpuLibraryCandidates);
+    }
     candidates.addAll(dynamicNames);
-    return candidates.toList(growable: false);
+    final resolved = candidates.toList(growable: false);
+    if (backend == 'cpu' && Platform.isAndroid) {
+      resolved.sort(_compareAndroidCpuLibraryCandidates);
+    }
+    return resolved;
+  }
+
+  static int _compareAndroidCpuLibraryCandidates(String a, String b) {
+    final rankA = _androidCpuLibraryCandidateRank(a);
+    final rankB = _androidCpuLibraryCandidateRank(b);
+    if (rankA != rankB) {
+      return rankA.compareTo(rankB);
+    }
+    return a.compareTo(b);
+  }
+
+  static int _androidCpuLibraryCandidateRank(String fileName) {
+    final lowered = fileName.toLowerCase();
+    if (lowered == 'libggml-cpu.so') {
+      return 1000;
+    }
+
+    final variantMatch = RegExp(
+      r'^libggml-cpu-([^/\\]+)\.so$',
+    ).firstMatch(lowered);
+    if (variantMatch == null) {
+      return 2000;
+    }
+
+    final variant = variantMatch.group(1)!;
+    return _androidCpuVariantPriority[variant] ?? 900;
   }
 
   List<String> _ggmlLibraryCandidateFileNames() {
@@ -1501,12 +1547,12 @@ class LlamaCppService {
   RegExp _backendLibraryPattern(String backend) {
     final escapedBackend = RegExp.escape(backend);
     if (Platform.isWindows) {
-      return RegExp('^ggml-$escapedBackend(?:-[^.\\\\/]+)*\\.dll\$');
+      return RegExp('^ggml-$escapedBackend(?:-[^\\\\/]+)*\\.dll\$');
     }
     if (Platform.isMacOS || Platform.isIOS) {
-      return RegExp('^libggml-$escapedBackend(?:-[^.\\\\/]+)*\\.dylib\$');
+      return RegExp('^libggml-$escapedBackend(?:-[^\\\\/]+)*\\.dylib\$');
     }
-    return RegExp('^libggml-$escapedBackend(?:-[^.\\\\/]+)*\\.so\$');
+    return RegExp('^libggml-$escapedBackend(?:-[^\\\\/]+)*\\.so\$');
   }
 
   RegExp _ggmlLibraryPattern() {

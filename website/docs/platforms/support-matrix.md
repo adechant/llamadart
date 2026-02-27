@@ -69,16 +69,28 @@ hooks:
     llamadart:
       llamadart_native_backends:
         platforms:
-          android-arm64: [vulkan]
+          android-arm64:
+            backends: [vulkan]
+            cpu_profile: full # default; use compact for baseline-only
           linux-x64: [vulkan, cuda]
           windows-x64:
             backends: [vulkan, cuda, blas]
 ```
 
+Android arm64 CPU policy keys (`platforms.android-arm64`):
+
+- `cpu_profile: full` (default): include all Android ARM CPU variant modules.
+- `cpu_profile: compact`: include baseline CPU variant module only.
+- `cpu_variants: [...]` (advanced): explicit CPU variant list, overrides
+  `cpu_profile`.
+
 ## Selection and fallback behavior
 
 - Configurable targets start from defaults (`cpu`, `vulkan`) if available.
 - `cpu` is auto-added as fallback when present in the bundle.
+- Android arm64 defaults to `cpu_profile: full`.
+- `cpu_variants` (if provided) takes precedence over `cpu_profile` for Android
+  arm64.
 - If requested modules are unavailable for a bundle, the hook warns and falls
   back to defaults.
 - If defaults are also unavailable, all available modules in that bundle are
