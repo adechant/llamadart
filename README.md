@@ -35,7 +35,7 @@
 
 ```yaml
 dependencies:
-  llamadart: ^0.6.3
+  llamadart: ^0.6.4
 ```
 
 ### 2. Run with defaults
@@ -98,7 +98,7 @@ Future<void> main() async {
 <details>
 <summary>Full module matrix (available modules by target)</summary>
 
-Backend module matrix from pinned native tag `b8099`:
+Backend module matrix from pinned native tag `b8157`:
 
 | Target | Available backend modules in bundle |
 |--------|-------------------------------------|

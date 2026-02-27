@@ -30,6 +30,9 @@ Use this checklist when upgrading `llamadart` across minor/major versions.
 
 - Confirm native runtime bundle expectations
 - Confirm web bridge asset tags and compatibility rules
+- For Android arm64 custom config, verify CPU policy intent: shorthand
+  `android-arm64: [vulkan]` now uses default `cpu_profile: full`; set
+  `cpu_profile: compact` if you want baseline-only/smaller packaging.
 
 ## 6. Update docs for your team/app
 

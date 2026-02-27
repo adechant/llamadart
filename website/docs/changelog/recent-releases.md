@@ -6,6 +6,18 @@ For canonical full release notes, use:
 
 - [`CHANGELOG.md`](https://github.com/leehack/llamadart/blob/main/CHANGELOG.md)
 
+## 0.6.4
+
+- Aligned multimodal projector offload with effective model-load settings,
+  including CPU-only configurations.
+- Added safer backend selection/discovery APIs and improved runtime backend
+  status plus GPU-layer diagnostics accuracy.
+- Improved web large-model handling with cache-prefetch download UX, bridge
+  worker fallback paths, memory-pressure retries, and wasm64-core fallback
+  wiring.
+- Synced native hook tag to `b8157` and added Android arm64 CPU-profile and
+  variant policy support with loader hardening.
+
 ## 0.6.3
 
 - Synced native runtime to llama.cpp `b8138` and picked up Android arm64
