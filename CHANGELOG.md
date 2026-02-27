@@ -30,6 +30,14 @@
   * Updated default bridge asset pinning in chat app/docs/fetch script to `leehack/llama-web-bridge-assets@v0.1.5`.
   * Updated HF static chat-app deploy workflow to emit COI `custom_headers` in generated Space README frontmatter.
 
+* **Android arm64 CPU variant policy and loader hardening**:
+  * Updated native hook tag pin from `b8138` to `b8157` to consume Android arm64 CPU-variant runtime bundles.
+  * Added Android arm64 CPU policy keys in hook config: `cpu_profile` (`full` default, `compact`) and advanced `cpu_variants` override.
+  * Added hook tests and Android hook integration coverage to verify pubspec-driven CPU variant packaging behavior.
+  * Hardened Android runtime backend loading to resolve CPU variant modules even when backend module directory discovery is unavailable.
+  * Added Android runtime smoke helper (`scripts/android_runtime_smoke.sh`) and smoke-plan docs for device verification.
+  * **Compatibility note**: no public API breaking changes. `android-arm64` now defaults to `cpu_profile: full`, which may increase package size compared with baseline-only CPU packaging.
+
 ## 0.6.3
 
 * **Native runtime sync (llama.cpp b8138)**:

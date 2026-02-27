@@ -69,16 +69,62 @@ hooks:
     llamadart:
       llamadart_native_backends:
         platforms:
-          android-arm64: [vulkan]
+          android-arm64:
+            backends: [vulkan]
+            cpu_profile: full # default; use compact for baseline-only
           linux-x64: [vulkan, cuda]
           windows-x64:
             backends: [vulkan, cuda, blas]
 ```
 
+Android arm64 CPU policy keys (`platforms.android-arm64`):
+
+- `cpu_profile: full` (default): include all Android ARM CPU variant modules.
+- `cpu_profile: compact`: include baseline CPU variant module only.
+- `cpu_variants: [...]` (advanced): explicit CPU variant list, overrides
+  `cpu_profile`.
+
+Supported canonical `cpu_variants` values:
+
+- `android_armv8.0_1` (baseline)
+- `android_armv8.2_1`
+- `android_armv8.2_2`
+- `android_armv8.6_1`
+- `android_armv9.0_1`
+- `android_armv9.2_1`
+- `android_armv9.2_2`
+
+Variant feature differences:
+
+| Variant | Optional feature set used by that module |
+| --- | --- |
+| `android_armv8.0_1` | baseline |
+| `android_armv8.2_1` | `DOTPROD` |
+| `android_armv8.2_2` | `DOTPROD` + `FP16_VECTOR_ARITHMETIC` |
+| `android_armv8.6_1` | `DOTPROD` + `FP16_VECTOR_ARITHMETIC` + `MATMUL_INT8` |
+| `android_armv9.0_1` | `DOTPROD` + `FP16_VECTOR_ARITHMETIC` + `MATMUL_INT8` + `SVE2` |
+| `android_armv9.2_1` | `DOTPROD` + `FP16_VECTOR_ARITHMETIC` + `MATMUL_INT8` + `SVE` + `SME` |
+| `android_armv9.2_2` | `DOTPROD` + `FP16_VECTOR_ARITHMETIC` + `MATMUL_INT8` + `SVE` + `SVE2` + `SME` |
+
+Accepted `cpu_variants` input forms are normalized, for example:
+
+- `baseline`
+- `armv8_6_1`
+- `v9_0_1`
+- `android-armv9.2_2`
+- `libggml-cpu-android_armv8.2_2.so`
+
+If `cpu_variants` contains unknown entries, they are ignored with warnings. If
+no valid entries remain, selection falls back to `cpu_profile` (or default
+`full`).
+
 ## Selection and fallback behavior
 
 - Configurable targets start from defaults (`cpu`, `vulkan`) if available.
 - `cpu` is auto-added as fallback when present in the bundle.
+- Android arm64 defaults to `cpu_profile: full`.
+- `cpu_variants` (if provided) takes precedence over `cpu_profile` for Android
+  arm64.
 - If requested modules are unavailable for a bundle, the hook warns and falls
   back to defaults.
 - If defaults are also unavailable, all available modules in that bundle are
