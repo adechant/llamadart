@@ -120,10 +120,37 @@
     const bridgeAssetsTag =
       typeof configuredTag === 'string' && configuredTag.length > 0
         ? configuredTag
-        : 'v0.1.4';
+        : 'v0.1.5';
+    const localBridgeVersion = 'dev-worker-fix-20260226-43';
 
-    const localBridgeUrl = './webgpu_bridge/llama_webgpu_bridge.js';
+    const localBridgeUrl = `./webgpu_bridge/llama_webgpu_bridge.js?v=${localBridgeVersion}`;
     const cdnBridgeUrl = `https://cdn.jsdelivr.net/gh/${bridgeAssetsRepo}@${bridgeAssetsTag}/llama_webgpu_bridge.js`;
+
+    function deriveWorkerModuleUrl(moduleUrl) {
+      try {
+        const url = new URL(moduleUrl, window.location.href);
+        url.pathname = url.pathname.replace(
+          /\/llama_webgpu_bridge\.js$/,
+          '/llama_webgpu_bridge_worker.js',
+        );
+        return url.toString();
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function deriveMem64CoreModuleUrl(moduleUrl) {
+      try {
+        const url = new URL(moduleUrl, window.location.href);
+        url.pathname = url.pathname.replace(
+          /\/llama_webgpu_bridge\.js$/,
+          '/llama_webgpu_core_mem64.js',
+        );
+        return url.toString();
+      } catch (_) {
+        return null;
+      }
+    }
 
     async function loadBridge(moduleUrl, source) {
       const coreModuleUrl = await resolveCoreModuleUrl(moduleUrl);
@@ -132,14 +159,28 @@
         throw new Error('Bridge module loaded but LlamaWebGpuBridge export was missing.');
       }
 
+      const supportsDedicatedWorkerEntry =
+        typeof mod.enableBridgeWorkerHost === 'function';
+      const workerModuleUrl = supportsDedicatedWorkerEntry
+        ? deriveWorkerModuleUrl(moduleUrl)
+        : null;
+      const coreModuleUrlMem64 = deriveMem64CoreModuleUrl(moduleUrl);
+      const preferMemory64 = window.__llamadartBridgeEnableMem64 !== false;
+
       window.LlamaWebGpuBridge = mod.LlamaWebGpuBridge;
       window.__llamadartBridgeAdaptiveSafariGpu =
         mod.LlamaWebGpuBridge?.supportsSafariAdaptiveGpu === true;
       window.__llamadartBridgeAssetSource = source;
       window.__llamadartBridgeModuleUrl = moduleUrl;
       window.__llamadartBridgeCoreModuleUrl = coreModuleUrl;
+      window.__llamadartBridgeCoreModuleUrlMem64 = coreModuleUrlMem64;
+      window.__llamadartBridgeWorkerUrl = workerModuleUrl;
+      window.__llamadartBridgePreferMemory64 = preferMemory64;
+      window.__llamadartBridgeWorkerFallbackReason = null;
       window.__llamadartBridgeLoadError = null;
-      console.info(`llamadart: Web bridge runtime loaded (${source})`);
+      console.info(
+        `llamadart: Web bridge runtime loaded (${source}), worker=${workerModuleUrl ?? 'auto'}, mem64=${coreModuleUrlMem64 ?? 'none'}, preferMem64=${preferMemory64}`,
+      );
     }
 
     let localError = null;
