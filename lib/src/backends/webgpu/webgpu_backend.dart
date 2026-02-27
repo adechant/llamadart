@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
+import 'dart:math' as math;
 
 import 'package:web/web.dart';
 
@@ -20,6 +21,7 @@ external JSArray _objectKeys(JSObject obj);
 class WebGpuLlamaBackend implements LlamaBackend, BackendAvailability {
   static const Duration _bridgeReadyTimeout = Duration(seconds: 12);
   static const Duration _bridgePollInterval = Duration(milliseconds: 100);
+  static const int _remoteFetchChunkBytes = 256 * 1024;
 
   final String? _bridgeScriptUrl;
   final String? _bridgeWasmUrl;
@@ -34,6 +36,8 @@ class WebGpuLlamaBackend implements LlamaBackend, BackendAvailability {
   AbortController? _abortController;
   int? _lastNCtx;
   bool _mmContextActive = false;
+  bool? _preferMemory64Override;
+  bool? _forceRemoteFetchBackendOverride;
 
   /// Creates a bridge-backed web backend.
   WebGpuLlamaBackend({
@@ -154,11 +158,29 @@ class WebGpuLlamaBackend implements LlamaBackend, BackendAvailability {
     );
 
     final coreModuleUrl = _getGlobalString('__llamadartBridgeCoreModuleUrl');
+    final coreModuleUrlMem64 = _getGlobalString(
+      '__llamadartBridgeCoreModuleUrlMem64',
+    );
+    final workerModuleUrl =
+        _bridgeWorkerUrl ?? _getGlobalString('__llamadartBridgeWorkerUrl');
+    final preferMemory64 =
+        _preferMemory64Override ??
+        _getGlobalOptionalBool('__llamadartBridgePreferMemory64');
+    final allowAutoRemoteFetchBackend =
+        _getGlobalOptionalBool(
+          '__llamadartBridgeAllowAutoRemoteFetchBackend',
+        ) ??
+        true;
 
     return WebGpuBridgeConfig(
       wasmUrl: _bridgeWasmUrl?.toJS,
-      workerUrl: _bridgeWorkerUrl?.toJS,
+      wasmUrlMem64: _getGlobalString('__llamadartBridgeWasmUrlMem64')?.toJS,
+      workerUrl: workerModuleUrl?.toJS,
       coreModuleUrl: coreModuleUrl?.toJS,
+      coreModuleUrlMem64: coreModuleUrlMem64?.toJS,
+      preferMemory64: preferMemory64,
+      allowAutoRemoteFetchBackend: allowAutoRemoteFetchBackend,
+      remoteFetchChunkBytes: _remoteFetchChunkBytes,
       logLevel: _logLevel.index,
       logger: logger,
     );
@@ -314,6 +336,27 @@ class WebGpuLlamaBackend implements LlamaBackend, BackendAvailability {
     return text == 'true' || text == '1' || text == 'yes' || text == 'on';
   }
 
+  bool? _getGlobalOptionalBool(String propertyName) {
+    final raw = globalContext.getProperty(propertyName.toJS);
+    if (raw.isA<JSBoolean>()) {
+      return (raw as JSBoolean).toDart;
+    }
+
+    final text = raw.toString().trim().toLowerCase();
+    if (text == 'undefined' || text == 'null' || text.isEmpty) {
+      return null;
+    }
+
+    if (text == 'true' || text == '1' || text == 'yes' || text == 'on') {
+      return true;
+    }
+    if (text == 'false' || text == '0' || text == 'no' || text == 'off') {
+      return false;
+    }
+
+    return null;
+  }
+
   String? _getBridgeUserAgent() {
     final override = _getGlobalString('__llamadartBridgeUserAgent');
     if (override != null) {
@@ -402,8 +445,102 @@ class WebGpuLlamaBackend implements LlamaBackend, BackendAvailability {
     return values.join(' | ');
   }
 
-  UnsupportedError? _normalizeBridgeRuntimeError(Object error) {
+  bool _isLikelyMemoryPressureError(Object error) {
+    final lowered = _errorText(error).toLowerCase();
+    return lowered.contains('array buffer allocation failed') ||
+        lowered.contains('out of memory') ||
+        lowered.contains('memory access out of bounds') ||
+        lowered.contains('bad_alloc') ||
+        lowered.contains('aborted(native code called abort())');
+  }
+
+  bool _isBigIntInteropError(Object error) {
+    final lowered = _errorText(error).toLowerCase();
+    return lowered.contains('cannot convert') && lowered.contains('bigint');
+  }
+
+  bool _isThreadConstructorFailure(Object error) {
+    final lowered = _errorText(error).toLowerCase();
+    return lowered.contains('thread constructor failed') ||
+        lowered.contains('error 138');
+  }
+
+  List<({int contextSize, int gpuLayers})> _buildLoadAttempts({
+    required int requestedContextSize,
+    required int requestedGpuLayers,
+  }) {
+    final contextCandidates = <int>[
+      requestedContextSize,
+      2048,
+      1024,
+      768,
+      512,
+      256,
+    ];
+    final contexts = <int>[];
+    for (final candidate in contextCandidates) {
+      if (candidate <= requestedContextSize) {
+        contexts.add(candidate);
+      }
+    }
+
+    final attempts = <({int contextSize, int gpuLayers})>[];
+    final seen = <String>{};
+
+    for (final context in contexts) {
+      final normalizedContext = context.clamp(512, 32768);
+      final key = '$normalizedContext|$requestedGpuLayers';
+      if (seen.add(key)) {
+        attempts.add((
+          contextSize: normalizedContext,
+          gpuLayers: requestedGpuLayers,
+        ));
+      }
+
+      if (requestedGpuLayers > 0) {
+        final cpuKey = '$normalizedContext|0';
+        if (seen.add(cpuKey)) {
+          attempts.add((contextSize: normalizedContext, gpuLayers: 0));
+        }
+      }
+    }
+
+    return attempts;
+  }
+
+  Map<String, String> _collectBridgeRuntimeHints(LlamaWebGpuBridge bridge) {
+    final metadata = bridge.getModelMetadata();
+    if (metadata == null) {
+      return const <String, String>{};
+    }
+
+    final out = <String, String>{};
+    final keys = _objectKeys(metadata);
+    for (int i = 0; i < keys.length; i++) {
+      final key = (keys.getProperty(i.toJS) as JSString).toDart;
+      if (!key.startsWith('llamadart.webgpu.')) {
+        continue;
+      }
+
+      final value = metadata.getProperty(key.toJS);
+      if (value.isA<JSString>()) {
+        out[key] = (value as JSString).toDart;
+      } else if (value.isA<JSNumber>()) {
+        out[key] = (value as JSNumber).toDartDouble.toString();
+      } else {
+        out[key] = value.toString();
+      }
+    }
+
+    return out;
+  }
+
+  UnsupportedError? _normalizeBridgeRuntimeError(
+    Object error, {
+    Map<String, String>? runtimeHints,
+  }) {
     final text = _errorText(error);
+    final loweredText = text.toLowerCase();
     if (text.contains('JSPI not supported by current environment')) {
       final source = _getGlobalString('__llamadartBridgeAssetSource');
       final moduleUrl = _getGlobalString('__llamadartBridgeModuleUrl');
@@ -422,6 +559,104 @@ class WebGpuLlamaBackend implements LlamaBackend, BackendAvailability {
         'Bridge runtime requires JSPI, which is unavailable in this browser. '
         'Use browser-compatible bridge assets built without JSPI '
         '(Asyncify/wasm32), or enable JSPI experimental browser flags.$suffix',
+      );
+    }
+
+    final runtimeNotes = runtimeHints?['llamadart.webgpu.runtime_notes'] ?? '';
+    final threadConstructorFailure =
+        runtimeNotes.contains('threads_capped_no_coi') ||
+        runtimeNotes.contains('thread_constructor_failed') ||
+        loweredText.contains('thread constructor failed');
+
+    if (threadConstructorFailure) {
+      final workerFallbackReason = _getGlobalString(
+        '__llamadartBridgeWorkerFallbackReason',
+      );
+      final workerSuffix =
+          workerFallbackReason == null || workerFallbackReason.isEmpty
+          ? ''
+          : ' Worker fallback reason: $workerFallbackReason.';
+
+      final hintParts = <String>[];
+      final coreVariant = runtimeHints?['llamadart.webgpu.core_variant'];
+      if (coreVariant != null && coreVariant.isNotEmpty) {
+        hintParts.add('core=$coreVariant');
+      }
+      final modelSource = runtimeHints?['llamadart.webgpu.model_source'];
+      if (modelSource != null && modelSource.isNotEmpty) {
+        hintParts.add('source=$modelSource');
+      }
+      final nThreads = runtimeHints?['llamadart.webgpu.n_threads'];
+      if (nThreads != null && nThreads.isNotEmpty) {
+        hintParts.add('nThreads=$nThreads');
+      }
+      final nGpuLayers = runtimeHints?['llamadart.webgpu.n_gpu_layers'];
+      if (nGpuLayers != null && nGpuLayers.isNotEmpty) {
+        hintParts.add('nGpuLayers=$nGpuLayers');
+      }
+      final modelCacheState =
+          runtimeHints?['llamadart.webgpu.model_cache_state'];
+      if (modelCacheState != null && modelCacheState.isNotEmpty) {
+        hintParts.add('cache=$modelCacheState');
+      }
+      if (runtimeNotes.isNotEmpty) {
+        hintParts.add('notes=$runtimeNotes');
+      }
+      final hintSuffix = hintParts.isEmpty
+          ? ''
+          : ' Runtime hints: ${hintParts.join(', ')}.';
+
+      return UnsupportedError(
+        'Browser runtime blocked worker thread creation required by the '
+        'fetch-backed web model loader. Enable cross-origin isolation '
+        '(COOP/COEP) for your app origin, or use a smaller/sharded model '
+        'that can be staged with standard streamed loading.$workerSuffix$hintSuffix',
+      );
+    }
+
+    if (_isLikelyMemoryPressureError(error)) {
+      final workerFallbackReason = _getGlobalString(
+        '__llamadartBridgeWorkerFallbackReason',
+      );
+      final workerSuffix =
+          workerFallbackReason == null || workerFallbackReason.isEmpty
+          ? ''
+          : ' Worker fallback reason: $workerFallbackReason.';
+
+      final hintParts = <String>[];
+      final coreVariant = runtimeHints?['llamadart.webgpu.core_variant'];
+      if (coreVariant != null && coreVariant.isNotEmpty) {
+        hintParts.add('core=$coreVariant');
+      }
+      final modelSource = runtimeHints?['llamadart.webgpu.model_source'];
+      if (modelSource != null && modelSource.isNotEmpty) {
+        hintParts.add('source=$modelSource');
+      }
+      final nThreads = runtimeHints?['llamadart.webgpu.n_threads'];
+      if (nThreads != null && nThreads.isNotEmpty) {
+        hintParts.add('nThreads=$nThreads');
+      }
+      final nGpuLayers = runtimeHints?['llamadart.webgpu.n_gpu_layers'];
+      if (nGpuLayers != null && nGpuLayers.isNotEmpty) {
+        hintParts.add('nGpuLayers=$nGpuLayers');
+      }
+      final modelCacheState =
+          runtimeHints?['llamadart.webgpu.model_cache_state'];
+      if (modelCacheState != null && modelCacheState.isNotEmpty) {
+        hintParts.add('cache=$modelCacheState');
+      }
+      if (runtimeNotes.isNotEmpty) {
+        hintParts.add('notes=$runtimeNotes');
+      }
+      final hintSuffix = hintParts.isEmpty
+          ? ''
+          : ' Runtime hints: ${hintParts.join(', ')}.';
+
+      return UnsupportedError(
+        'Model loading exceeded browser memory limits. '
+        'This model may be too large for current WebAssembly/browser constraints. '
+        'Try a smaller GGUF quantization, reduce context size, close other tabs, '
+        'or use native runtime for very large models.$workerSuffix$hintSuffix',
       );
     }
 
@@ -449,7 +684,8 @@ class WebGpuLlamaBackend implements LlamaBackend, BackendAvailability {
     ModelParams params, {
     Function(double progress)? onProgress,
   }) async {
-    _lastNCtx = params.contextSize;
+    _preferMemory64Override = null;
+    _forceRemoteFetchBackendOverride = null;
 
     final requestedThreads = params.numberOfThreads > 0
         ? params.numberOfThreads
@@ -471,57 +707,324 @@ class WebGpuLlamaBackend implements LlamaBackend, BackendAvailability {
       );
     }
 
-    await _activateBridge();
-    final bridge = _requireBridge();
+    final progressCallback = onProgress == null
+        ? null
+        : (JSAny p) {
+            if (p.isA<JSObject>()) {
+              final obj = p as JSObject;
+              final loaded = obj.getProperty('loaded'.toJS);
+              final total = obj.getProperty('total'.toJS);
+              if (loaded.isA<JSNumber>() && total.isA<JSNumber>()) {
+                final l = (loaded as JSNumber).toDartDouble;
+                final t = (total as JSNumber).toDartDouble;
+                if (t > 0) {
+                  onProgress(l / t);
+                  return;
+                }
+              }
+            }
 
-    try {
-      final loadPromise = bridge.loadModelFromUrl(
-        url,
-        WebGpuLoadModelOptions(
-          nCtx: params.contextSize,
-          nThreads: requestedThreads,
-          nGpuLayers: requestedGpuLayers,
-          useCache: true,
-          progressCallback: onProgress == null
-              ? null
-              : (JSAny p) {
-                  if (p.isA<JSObject>()) {
-                    final obj = p as JSObject;
-                    final loaded = obj.getProperty('loaded'.toJS);
-                    final total = obj.getProperty('total'.toJS);
-                    if (loaded.isA<JSNumber>() && total.isA<JSNumber>()) {
-                      final l = (loaded as JSNumber).toDartDouble;
-                      final t = (total as JSNumber).toDartDouble;
-                      if (t > 0) {
-                        onProgress(l / t);
-                        return;
-                      }
-                    }
-                  }
+            if (p.isA<JSNumber>()) {
+              onProgress((p as JSNumber).toDartDouble);
+            }
+          }.toJS;
 
-                  if (p.isA<JSNumber>()) {
-                    onProgress((p as JSNumber).toDartDouble);
-                  }
-                }.toJS,
-        ),
-      );
+    final loadAttempts = _buildLoadAttempts(
+      requestedContextSize: params.contextSize,
+      requestedGpuLayers: requestedGpuLayers,
+    );
 
-      if (loadPromise != null) {
-        await loadPromise.toDart;
+    Object? lastError;
+    Map<String, String> lastRuntimeHints = const <String, String>{};
+    var retriedWithWasm32 = false;
+    var retriedWithWasm64 = false;
+    var retriedWithoutRemoteFetchBackend = false;
+    var remoteFetchChunkRetryCount = 0;
+    var retriedAfterFsWriteFailureWithRemote = false;
+    var remoteFetchBackendKnownUnstable = false;
+    var wasm64InteropKnownBroken = false;
+    var remoteFetchChunkBytesOverride = _remoteFetchChunkBytes;
+    for (var index = 0; index < loadAttempts.length; index += 1) {
+      final attempt = loadAttempts[index];
+      _lastNCtx = attempt.contextSize;
+      LlamaWebGpuBridge? bridgeForAttempt;
+      bool? forceRemoteFetchBackend;
+      final attemptThreads = switch (index) {
+        0 => requestedThreads,
+        1 || 2 => requestedThreads == null ? 4 : math.min(requestedThreads, 4),
+        3 ||
+        4 ||
+        5 ||
+        6 => requestedThreads == null ? 2 : math.min(requestedThreads, 2),
+        _ => 1,
+      };
+
+      try {
+        await _activateBridge();
+        final bridge = _requireBridge();
+        bridgeForAttempt = bridge;
+
+        if (_forceRemoteFetchBackendOverride != null) {
+          forceRemoteFetchBackend = _forceRemoteFetchBackendOverride;
+        } else if (_getGlobalBool('__llamadartBridgeForceRemoteFetchBackend')) {
+          forceRemoteFetchBackend = true;
+        }
+
+        final loadPromise = bridge.loadModelFromUrl(
+          url,
+          WebGpuLoadModelOptions(
+            nCtx: attempt.contextSize,
+            nThreads: attemptThreads,
+            nGpuLayers: attempt.gpuLayers,
+            useCache: true,
+            forceRemoteFetchBackend: forceRemoteFetchBackend,
+            remoteFetchChunkBytes: remoteFetchChunkBytesOverride,
+            progressCallback: progressCallback,
+          ),
+        );
+
+        if (loadPromise != null) {
+          await loadPromise.toDart;
+        }
+
+        if (index > 0) {
+          console.warn(
+            'WebGpuLlamaBackend: model loaded after fallback '
+                    '(nCtx=${attempt.contextSize}, nGpuLayers=${attempt.gpuLayers}, '
+                    'nThreads=${attemptThreads ?? 'auto'})'
+                .toJS,
+          );
+        }
+
+        _isReady = true;
+        _mmContextActive = false;
+        return 1;
+      } catch (e) {
+        lastError = e;
+        Map<String, String> runtimeHints = const <String, String>{};
+        if (bridgeForAttempt != null) {
+          try {
+            runtimeHints = _collectBridgeRuntimeHints(bridgeForAttempt);
+          } catch (_) {
+            runtimeHints = const <String, String>{};
+          }
+        }
+        lastRuntimeHints = runtimeHints;
+
+        console.error('WebGpuLlamaBackend: Bridge model load failed: $e'.toJS);
+        if (runtimeHints.isNotEmpty) {
+          console.warn(
+            'WebGpuLlamaBackend: bridge runtime hints $runtimeHints'.toJS,
+          );
+        }
+
+        final coreVariant = runtimeHints['llamadart.webgpu.core_variant'];
+        final runtimeNotes =
+            runtimeHints['llamadart.webgpu.runtime_notes'] ?? '';
+        final fsWriteFailed =
+            runtimeNotes.contains('model_response_nostream') ||
+            runtimeNotes.contains('model_fs_write_bigint_error') ||
+            runtimeNotes.contains('model_fs_write_abort') ||
+            runtimeNotes.contains('model_fs_write_arraybuffer_oom') ||
+            runtimeNotes.contains('model_fs_write_failed');
+        final bigIntInteropError = _isBigIntInteropError(e);
+        final remoteFetchAttempted = runtimeNotes.contains(
+          'model_fetch_backend_attempt',
+        );
+        final remoteFetchAborted =
+            runtimeNotes.contains('model_fetch_backend_abort') ||
+            (remoteFetchAttempted &&
+                _errorText(e).toLowerCase().contains(
+                  'aborted(native code called abort())',
+                ));
+        final threadConstructorFailure =
+            _isThreadConstructorFailure(e) ||
+            runtimeNotes.contains('thread_constructor_failed') ||
+            runtimeNotes.contains('threads_capped_no_coi');
+        final forceRemoteFetchRequested = forceRemoteFetchBackend == true;
+
+        if (remoteFetchAborted) {
+          remoteFetchBackendKnownUnstable = true;
+          if (!forceRemoteFetchRequested) {
+            _forceRemoteFetchBackendOverride = false;
+          }
+        }
+
+        final shouldRetryWithoutRemoteFetchBackend =
+            !retriedWithoutRemoteFetchBackend &&
+            !forceRemoteFetchRequested &&
+            remoteFetchAttempted &&
+            remoteFetchAborted;
+        final shouldRetryWithSmallerRemoteFetchChunks =
+            remoteFetchChunkRetryCount < 10 &&
+            remoteFetchAttempted &&
+            remoteFetchAborted &&
+            forceRemoteFetchRequested &&
+            !threadConstructorFailure &&
+            remoteFetchChunkBytesOverride > 4 * 1024;
+        final shouldRetryWithWasm32 =
+            !retriedWithWasm32 &&
+            coreVariant == 'wasm64' &&
+            (bigIntInteropError ||
+                runtimeNotes.contains('model_fetch_backend_skipped_small'));
+
+        final shouldRetryWithWasm64 =
+            !retriedWithWasm64 &&
+            !wasm64InteropKnownBroken &&
+            coreVariant == 'wasm32' &&
+            _isLikelyMemoryPressureError(e) &&
+            !runtimeNotes.contains('model_fetch_backend_skipped_small');
+
+        final canRetry =
+            index < loadAttempts.length - 1 &&
+            _isLikelyMemoryPressureError(e) &&
+            !(fsWriteFailed && coreVariant == 'wasm64');
+
+        await _safeDisposeBridge();
+
+        if (shouldRetryWithSmallerRemoteFetchChunks) {
+          remoteFetchChunkRetryCount += 1;
+          remoteFetchChunkBytesOverride = math.max(
+            4 * 1024,
+            remoteFetchChunkBytesOverride ~/ 2,
+          );
+          _forceRemoteFetchBackendOverride = true;
+          index = -1;
+          console.warn(
+            'WebGpuLlamaBackend: fetch-backed model loading aborted; '
+                    'retrying with smaller fetch chunks '
+                    '(${remoteFetchChunkBytesOverride ~/ 1024} KiB, '
+                    'attempt #$remoteFetchChunkRetryCount).'
+                .toJS,
+          );
+          continue;
+        }
+
+        if (shouldRetryWithoutRemoteFetchBackend) {
+          retriedWithoutRemoteFetchBackend = true;
+          _forceRemoteFetchBackendOverride = false;
+
+          if (coreVariant == 'wasm32') {
+            _preferMemory64Override = true;
+          }
+
+          index = -1;
+          console.warn(
+            coreVariant == 'wasm32'
+                ? 'WebGpuLlamaBackend: fetch-backed model loading aborted on '
+                          'wasm32; retrying with wasm64 core and streamed '
+                          'network loading.'
+                      .toJS
+                : 'WebGpuLlamaBackend: fetch-backed model loading aborted; '
+                          'retrying with streamed network loading.'
+                      .toJS,
+          );
+          continue;
+        }
+
+        if (shouldRetryWithWasm32) {
+          retriedWithWasm32 = true;
+          if (bigIntInteropError) {
+            wasm64InteropKnownBroken = true;
+          }
+          _preferMemory64Override = false;
+          _forceRemoteFetchBackendOverride = false;
+          index = -1;
+          console.warn(
+            'WebGpuLlamaBackend: wasm64 BigInt interop failure detected; '
+                    'retrying with wasm32 core.'
+                .toJS,
+          );
+          continue;
+        }
+
+        if (shouldRetryWithWasm64) {
+          retriedWithWasm64 = true;
+          _preferMemory64Override = true;
+          _forceRemoteFetchBackendOverride =
+              (remoteFetchAttempted || remoteFetchBackendKnownUnstable)
+              ? false
+              : true;
+          index = -1;
+          console.warn(
+            remoteFetchAttempted
+                ? 'WebGpuLlamaBackend: wasm32 memory pressure detected after '
+                          'fetch-backed loading; retrying with wasm64 core and '
+                          'streamed network loading.'
+                      .toJS
+                : 'WebGpuLlamaBackend: wasm32 memory pressure detected; '
+                          'retrying with wasm64 core and fetch-backed loading.'
+                      .toJS,
+          );
+          continue;
+        }
+
+        if (fsWriteFailed && coreVariant == 'wasm64') {
+          if (!retriedAfterFsWriteFailureWithRemote) {
+            retriedAfterFsWriteFailureWithRemote = true;
+            _forceRemoteFetchBackendOverride = true;
+            remoteFetchChunkBytesOverride = math.min(
+              remoteFetchChunkBytesOverride,
+              128 * 1024,
+            );
+            index = -1;
+            console.warn(
+              'WebGpuLlamaBackend: wasm64 model staging failed; retrying '
+                      'with forced fetch-backed loading and '
+                      '${remoteFetchChunkBytesOverride ~/ 1024} KiB chunks.'
+                  .toJS,
+            );
+            continue;
+          }
+
+          console.warn(
+            'WebGpuLlamaBackend: wasm64 model staging failed; skipping '
+                    'fallback ladder because additional nCtx/GPU/thread '
+                    'reductions are unlikely to recover FS write failures.'
+                .toJS,
+          );
+        }
+
+        if (canRetry) {
+          final nextAttempt = loadAttempts[index + 1];
+          console.warn(
+            'WebGpuLlamaBackend: retrying web model load with reduced '
+                    'settings (nCtx=${nextAttempt.contextSize}, '
+                    'nGpuLayers=${nextAttempt.gpuLayers}, '
+                    'nThreads=${switch (index + 1) {
+                          0 => requestedThreads,
+                          1 || 2 => requestedThreads == null ? 4 : math.min(requestedThreads, 4),
+                          3 || 4 || 5 || 6 => requestedThreads == null ? 2 : math.min(requestedThreads, 2),
+                          _ => 1,
+                        } ?? 'auto'})'
+                .toJS,
+          );
+          continue;
+        }
+
+        final normalized = _normalizeBridgeRuntimeError(
+          e,
+          runtimeHints: runtimeHints,
+        );
+        if (normalized != null) {
+          throw normalized;
+        }
+        rethrow;
       }
+    }
 
-      _isReady = true;
-      _mmContextActive = false;
-      return 1;
-    } catch (e) {
-      console.error('WebGpuLlamaBackend: Bridge model load failed: $e'.toJS);
-      await _safeDisposeBridge();
-      final normalized = _normalizeBridgeRuntimeError(e);
+    if (lastError != null) {
+      final normalized = _normalizeBridgeRuntimeError(
+        lastError,
+        runtimeHints: lastRuntimeHints,
+      );
       if (normalized != null) {
         throw normalized;
       }
-      rethrow;
+      throw lastError;
     }
+
+    throw StateError('WebGpuLlamaBackend: model load failed unexpectedly');
   }
 
   @override

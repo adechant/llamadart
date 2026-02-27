@@ -264,7 +264,15 @@ _(Add screenshots here when complete)_
 - Model selection auto-wires mmproj URLs for multimodal web models.
 - Image/audio attachments on web use browser file bytes (local path-based loading remains native-only).
 - On web, model files are loaded by URL (local file download/cache flow differs from native).
-- On web, **Download** verifies remote model/mmproj availability without buffering full GGUF files in app memory; bridge cache is populated on first model load.
+- On web, **Download** prefetches model/mmproj bytes into browser Cache Storage with progress.
+- For very large web models, runtime may switch to worker-thread fetch-backed loading to reduce contiguous allocation pressure; this path may bypass prefetch cache reuse.
+- If optional `llama_webgpu_core_mem64` bridge assets are present and supported by the browser, chat app bridge bootstrapping can prefer wasm64 core and transparently fall back to wasm32.
+- Large single-file web model loading requires cross-origin isolation
+  (`window.crossOriginIsolated === true`).
+- You can force wasm32 preference for debugging by setting
+  `window.__llamadartBridgeEnableMem64 = false` before bridge bootstrap.
+- You can skip auto fetch-backed pre-attempts by setting
+  `window.__llamadartBridgeAllowAutoRemoteFetchBackend = false` before bridge bootstrap.
 
 ### Hugging Face static deployment (CI)
 
@@ -273,6 +281,18 @@ _(Add screenshots here when complete)_
 - Required repository secret: `HF_TOKEN` (write access to your Space repo).
 - Required repository variable: `HF_CHAT_APP_SPACE_REPO` in `owner/space` format.
 - Manual dispatch can override target Space via `space_repo` input and deploy a specific ref via `deploy_ref`.
+- The workflow-generated Space `README.md` already injects required COI headers
+  for large-model web runtime support.
+
+If deploying outside this workflow, set this frontmatter in Space README (all
+lowercase):
+
+```yaml
+custom_headers:
+  cross-origin-embedder-policy: require-corp
+  cross-origin-opener-policy: same-origin
+  cross-origin-resource-policy: cross-origin
+```
 
 
 ## Implemented Highlights ✅
