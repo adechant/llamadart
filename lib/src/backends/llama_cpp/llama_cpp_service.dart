@@ -1188,7 +1188,7 @@ class LlamaCppService {
       }
     }
 
-    if (Platform.isWindows && _tryRegisterBackendModuleViaAsset(backend)) {
+    if (_tryRegisterBackendModuleViaAsset(backend)) {
       return true;
     }
 
@@ -1196,12 +1196,27 @@ class LlamaCppService {
     return false;
   }
 
-  bool _tryRegisterBackendModuleViaAsset(String backend) {
-    final assetCandidates = <String>[
+  List<String> _backendAssetUriCandidates(String backend) {
+    final candidates = <String>{
       'package:llamadart/$backend',
-      // Keep a conservative fallback for future naming differences.
       'package:llamadart/ggml_$backend',
-    ];
+      'package:llamadart/ggml-$backend',
+    };
+
+    if (backend == 'cpu' && Platform.isAndroid) {
+      for (final variant in _androidCpuVariantPriority.keys) {
+        candidates.add(
+          'package:llamadart/ggml-cpu-${variant.replaceAll('.', '_')}',
+        );
+      }
+      candidates.add('package:llamadart/ggml-cpu');
+    }
+
+    return candidates.toList(growable: false);
+  }
+
+  bool _tryRegisterBackendModuleViaAsset(String backend) {
+    final assetCandidates = _backendAssetUriCandidates(backend);
 
     for (final assetUri in assetCandidates) {
       try {
@@ -1455,6 +1470,12 @@ class LlamaCppService {
     final baseName = _backendLibraryFileName(backend);
     final backendModuleDirectory = _backendModuleDirectory;
     if (backendModuleDirectory == null) {
+      if (backend == 'cpu' && Platform.isAndroid) {
+        final variants = _androidCpuVariantPriority.keys
+            .map((variant) => 'libggml-cpu-$variant.so')
+            .toList(growable: false);
+        return <String>[...variants, baseName];
+      }
       return <String>[baseName];
     }
 
