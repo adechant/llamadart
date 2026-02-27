@@ -34,6 +34,7 @@ class ManageModelsScreen extends StatefulWidget {
 class _ManageModelsScreenState extends State<ManageModelsScreen>
     with WidgetsBindingObserver {
   static const String _customModelsPrefsKey = 'custom_hf_models_v1';
+  static const int _webLargeModelWarningBytes = 1900 * 1024 * 1024;
 
   final ModelService _modelService = ModelService();
   final HuggingFaceModelDiscoveryService _hfDiscoveryService =
@@ -447,7 +448,9 @@ class _ManageModelsScreenState extends State<ManageModelsScreen>
   }
 
   String _downloadStageLabel(ModelDownloadProgress detail) {
-    final actionText = detail.resumed ? 'Resuming' : 'Downloading';
+    final actionText = detail.resumed
+        ? (kIsWeb ? 'Resuming cache' : 'Resuming')
+        : (kIsWeb ? 'Caching' : 'Downloading');
     final stageText = switch (detail.stage) {
       ModelDownloadStage.model => '$actionText model',
       ModelDownloadStage.multimodalProjector => '$actionText mmproj',
@@ -719,6 +722,17 @@ class _ManageModelsScreenState extends State<ManageModelsScreen>
       }
     } else {
       provider.updateMmprojPath('');
+    }
+
+    if (kIsWeb && model.sizeBytes >= _webLargeModelWarningBytes) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          duration: Duration(seconds: 4),
+          content: Text(
+            'Large web model selected. Download/cache can complete, but browser memory limits may still block loading.',
+          ),
+        ),
+      );
     }
 
     setState(() {
