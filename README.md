@@ -139,6 +139,42 @@ Android arm64 CPU profile options (`platforms.android-arm64`):
 - `cpu_variants: [...]` (advanced) overrides `cpu_profile` with an exact
   variant list.
 
+Supported canonical `cpu_variants` values:
+
+- `android_armv8.0_1`
+- `android_armv8.2_1`
+- `android_armv8.2_2`
+- `android_armv8.6_1`
+- `android_armv9.0_1`
+- `android_armv9.2_1`
+- `android_armv9.2_2`
+
+Variant feature differences:
+
+| Variant | Optional feature set used by that module |
+|--------|------------------------------------------|
+| `android_armv8.0_1` | baseline |
+| `android_armv8.2_1` | `DOTPROD` |
+| `android_armv8.2_2` | `DOTPROD` + `FP16_VECTOR_ARITHMETIC` |
+| `android_armv8.6_1` | `DOTPROD` + `FP16_VECTOR_ARITHMETIC` + `MATMUL_INT8` |
+| `android_armv9.0_1` | `DOTPROD` + `FP16_VECTOR_ARITHMETIC` + `MATMUL_INT8` + `SVE2` |
+| `android_armv9.2_1` | `DOTPROD` + `FP16_VECTOR_ARITHMETIC` + `MATMUL_INT8` + `SVE` + `SME` |
+| `android_armv9.2_2` | `DOTPROD` + `FP16_VECTOR_ARITHMETIC` + `MATMUL_INT8` + `SVE` + `SVE2` + `SME` |
+
+Accepted `cpu_variants` input forms are normalized, for example:
+
+- `baseline`
+- `armv8_6_1`
+- `v9_0_1`
+- `android-armv9.2_2`
+- `libggml-cpu-android_armv8.2_2.so`
+
+Selection precedence for Android arm64 CPU variants:
+
+1. `cpu_variants` (if present and valid)
+2. `cpu_profile`
+3. default profile (`full`)
+
 Notes:
 
 - Module availability depends on the pinned native release bundle and may change when the native tag updates.
@@ -148,6 +184,9 @@ Notes:
 - Android keeps OpenCL available for opt-in, but defaults to Vulkan.
 - Use `cpu_profile: compact` if you prefer smaller Android arm64 package size
   over CPU-path optimization coverage.
+- If `cpu_variants` contains unknown entries, they are ignored with warnings.
+- If all provided `cpu_variants` are invalid, hook selection falls back to
+  `cpu_profile`/default.
 - `KleidiAI` and `ZenDNN` are CPU-path optimizations in `llama.cpp`, not standalone backend module files.
 - `example/chat_app` backend settings list bundled backend options without forcing optional GPU backend initialization.
 - `example/chat_app` active backend status reflects the effective backend used for model load (for example `CPU` when GPU fallback is applied).

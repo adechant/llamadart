@@ -59,6 +59,30 @@ For `android-arm64`, CPU variant policy is configurable:
 - `cpu_profile: compact` keeps baseline CPU variant only.
 - `cpu_variants: [...]` (advanced) selects exact variants and overrides profile.
 
+Canonical `cpu_variants` values:
+
+- `android_armv8.0_1`
+- `android_armv8.2_1`
+- `android_armv8.2_2`
+- `android_armv8.6_1`
+- `android_armv9.0_1`
+- `android_armv9.2_1`
+- `android_armv9.2_2`
+
+Key differences:
+
+- `android_armv8.2_1`: `DOTPROD`
+- `android_armv8.2_2`: `DOTPROD` + `FP16_VECTOR_ARITHMETIC`
+- `android_armv9.2_1`: `DOTPROD` + `FP16_VECTOR_ARITHMETIC` + `MATMUL_INT8` +
+  `SVE` + `SME`
+- `android_armv9.2_2`: `android_armv9.2_1` + `SVE2`
+
+Selection precedence:
+
+1. `cpu_variants` (if present and valid)
+2. `cpu_profile`
+3. default `cpu_profile: full`
+
 If requested modules are unavailable for a target, `llamadart` falls back to
 safe defaults and logs warnings.
 
