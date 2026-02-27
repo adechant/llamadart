@@ -197,6 +197,40 @@ class LlamaCppService {
         effectiveGpuLayers <= 0;
   }
 
+  /// Resolves effective context batch parameters.
+  ///
+  /// Legacy behavior is preserved when [ModelParams.batchSize] and
+  /// [ModelParams.microBatchSize] are not set:
+  ///
+  /// - `n_batch = n_ctx`
+  /// - `n_ubatch = n_batch`
+  ///
+  /// Values are clamped to safe bounds so `n_ubatch <= n_batch <= n_ctx`.
+  static ({int batchSize, int microBatchSize}) resolveContextBatchSizes(
+    ModelParams modelParams,
+    int contextSize,
+  ) {
+    final effectiveContextSize = contextSize > 0 ? contextSize : 1;
+
+    final configuredBatchSize = modelParams.batchSize > 0
+        ? modelParams.batchSize
+        : effectiveContextSize;
+    final cappedBatchSize = configuredBatchSize > effectiveContextSize
+        ? effectiveContextSize
+        : configuredBatchSize;
+    final batchSize = cappedBatchSize > 0 ? cappedBatchSize : 1;
+
+    final configuredMicroBatchSize = modelParams.microBatchSize > 0
+        ? modelParams.microBatchSize
+        : batchSize;
+    final cappedMicroBatchSize = configuredMicroBatchSize > batchSize
+        ? batchSize
+        : configuredMicroBatchSize;
+    final microBatchSize = cappedMicroBatchSize > 0 ? cappedMicroBatchSize : 1;
+
+    return (batchSize: batchSize, microBatchSize: microBatchSize);
+  }
+
   /// Resolves whether multimodal projector init should use GPU.
   ///
   /// This follows effective model-load configuration from model loading.
@@ -1825,9 +1859,11 @@ class LlamaCppService {
     if (nCtx <= 0) {
       nCtx = llama_model_n_ctx_train(model.pointer);
     }
+    final resolvedBatchSizes = resolveContextBatchSizes(params, nCtx);
+
     ctxParams.n_ctx = nCtx;
-    ctxParams.n_batch = nCtx; // logic from original code
-    ctxParams.n_ubatch = nCtx; // logic from original code
+    ctxParams.n_batch = resolvedBatchSizes.batchSize;
+    ctxParams.n_ubatch = resolvedBatchSizes.microBatchSize;
     ctxParams.n_threads = params.numberOfThreads;
     ctxParams.n_threads_batch = params.numberOfThreadsBatch;
 
@@ -1855,7 +1891,7 @@ class LlamaCppService {
     _samplers[handle] = llama_sampler_chain_init(
       llama_sampler_chain_default_params(),
     );
-    _batches[handle] = llama_batch_init(nCtx, 0, 1);
+    _batches[handle] = llama_batch_init(resolvedBatchSizes.batchSize, 0, 1);
 
     return handle;
   }
@@ -2048,6 +2084,7 @@ class LlamaCppService {
         tokensPtr,
         nCtx,
         ctx,
+        maxBatchTokens: modelParams.n_batch,
         allowPromptReuse: allowTextPromptReuse,
       );
     }
@@ -2258,6 +2295,7 @@ class LlamaCppService {
     Pointer<Int32> tokensPtr,
     int nCtx,
     _LlamaContextWrapper ctx, {
+    required int maxBatchTokens,
     required bool allowPromptReuse,
   }) {
     final promptPtr = prompt.toNativeUtf8();
@@ -2278,12 +2316,24 @@ class LlamaCppService {
     }
 
     if (!allowPromptReuse || nTokens == 0) {
-      return _decodeAndCacheFullPrompt(batch, tokensPtr, ctx, nTokens);
+      return _decodeAndCacheFullPrompt(
+        batch,
+        tokensPtr,
+        ctx,
+        nTokens,
+        maxBatchTokens: maxBatchTokens,
+      );
     }
 
     final cachedTokens = ctx.cachedPromptTokens;
     if (cachedTokens == null || cachedTokens.isEmpty) {
-      return _decodeAndCacheFullPrompt(batch, tokensPtr, ctx, nTokens);
+      return _decodeAndCacheFullPrompt(
+        batch,
+        tokensPtr,
+        ctx,
+        nTokens,
+        maxBatchTokens: maxBatchTokens,
+      );
     }
 
     final reusedPrefix = _sharedPrefixLength(cachedTokens, tokensPtr, nTokens);
@@ -2296,13 +2346,20 @@ class LlamaCppService {
         tokensPtr,
         ctx,
         nTokens,
+        maxBatchTokens: maxBatchTokens,
         existingCachedTokens: canReuseCachedCopy ? cachedTokens : null,
       );
     }
 
     final memory = llama_get_memory(ctx.pointer);
     if (memory == nullptr) {
-      return _decodeAndCacheFullPrompt(batch, tokensPtr, ctx, nTokens);
+      return _decodeAndCacheFullPrompt(
+        batch,
+        tokensPtr,
+        ctx,
+        nTokens,
+        maxBatchTokens: maxBatchTokens,
+      );
     }
 
     final decodeStart = reusedPrefix;
@@ -2311,7 +2368,13 @@ class LlamaCppService {
     final removeTo = maxSeqPos >= decodeStart ? maxSeqPos + 1 : decodeStart;
     final removedTail = llama_memory_seq_rm(memory, 0, decodeStart, removeTo);
     if (!removedTail) {
-      return _decodeAndCacheFullPrompt(batch, tokensPtr, ctx, nTokens);
+      return _decodeAndCacheFullPrompt(
+        batch,
+        tokensPtr,
+        ctx,
+        nTokens,
+        maxBatchTokens: maxBatchTokens,
+      );
     }
 
     final suffixTokenCount = nTokens - decodeStart;
@@ -2321,6 +2384,7 @@ class LlamaCppService {
       ctx,
       startTokenIndex: decodeStart,
       tokenCount: suffixTokenCount,
+      maxBatchTokens: maxBatchTokens,
     );
 
     ctx.cachedPromptTokens = _copyPromptTokens(tokensPtr, nTokens);
@@ -2333,6 +2397,7 @@ class LlamaCppService {
     Pointer<Int32> tokensPtr,
     _LlamaContextWrapper ctx,
     int nTokens, {
+    required int maxBatchTokens,
     List<int>? existingCachedTokens,
   }) {
     _clearContextMemory(ctx.pointer);
@@ -2342,6 +2407,7 @@ class LlamaCppService {
       ctx,
       startTokenIndex: 0,
       tokenCount: nTokens,
+      maxBatchTokens: maxBatchTokens,
     );
     ctx.cachedPromptTokens =
         existingCachedTokens ?? _copyPromptTokens(tokensPtr, nTokens);
@@ -2361,23 +2427,39 @@ class LlamaCppService {
     _LlamaContextWrapper ctx, {
     required int startTokenIndex,
     required int tokenCount,
+    required int maxBatchTokens,
   }) {
     if (tokenCount <= 0) {
       return;
     }
 
-    batch.n_tokens = tokenCount;
-    for (int i = 0; i < tokenCount; i++) {
-      final tokenIndex = startTokenIndex + i;
-      batch.token[i] = tokensPtr[tokenIndex];
-      batch.pos[i] = tokenIndex;
-      batch.n_seq_id[i] = 1;
-      batch.seq_id[i][0] = 0;
-      batch.logits[i] = (i == tokenCount - 1) ? 1 : 0;
-    }
+    final effectiveBatchTokens = maxBatchTokens > 0
+        ? maxBatchTokens
+        : tokenCount;
+    var decoded = 0;
 
-    if (llama_decode(ctx.pointer, batch) != 0) {
-      throw Exception("Initial decode failed");
+    while (decoded < tokenCount) {
+      final remaining = tokenCount - decoded;
+      final chunkTokenCount = remaining > effectiveBatchTokens
+          ? effectiveBatchTokens
+          : remaining;
+      batch.n_tokens = chunkTokenCount;
+
+      for (int i = 0; i < chunkTokenCount; i++) {
+        final tokenIndex = startTokenIndex + decoded + i;
+        batch.token[i] = tokensPtr[tokenIndex];
+        batch.pos[i] = tokenIndex;
+        batch.n_seq_id[i] = 1;
+        batch.seq_id[i][0] = 0;
+        final isLastTokenInPrompt = decoded + i == tokenCount - 1;
+        batch.logits[i] = isLastTokenInPrompt ? 1 : 0;
+      }
+
+      if (llama_decode(ctx.pointer, batch) != 0) {
+        throw Exception("Initial decode failed");
+      }
+
+      decoded += chunkTokenCount;
     }
   }
 
