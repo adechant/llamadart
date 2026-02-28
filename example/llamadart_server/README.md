@@ -7,6 +7,7 @@ It exposes OpenAI-compatible endpoints:
 
 - `GET /v1/models`
 - `POST /v1/chat/completions`
+- `POST /v1/embeddings`
 - `GET /openapi.json`
 - `GET /docs` (Swagger UI)
 
@@ -40,7 +41,7 @@ Public APIs are exported directly from `lib/llamadart_server.dart`.
 - By default, tools are passed through to the model prompt only (no server-side
   execution). Use `--enable-tool-execution` to enable an example built-in tool
   loop.
-- Chat Completions only (no Embeddings or legacy Completions endpoint)
+- No legacy Completions endpoint
 
 ## Run
 
@@ -88,7 +89,7 @@ Request-provided sampling fields (for example `temperature`, `top_p`, `seed`,
 - OpenAPI JSON: `http://127.0.0.1:8080/openapi.json`
 - Swagger UI: `http://127.0.0.1:8080/docs`
 - Swagger includes ready-made chat request examples (basic, streaming, tools)
-  under `POST /v1/chat/completions`.
+  and embeddings examples under `POST /v1/embeddings`.
 
 ```bash
 curl http://127.0.0.1:8080/openapi.json
@@ -137,6 +138,21 @@ curl -N http://127.0.0.1:8080/v1/chat/completions \
 ```bash
 curl http://127.0.0.1:8080/v1/models \
   -H "Authorization: Bearer YOUR_KEY"
+```
+
+### 5. Embeddings
+
+```bash
+curl http://127.0.0.1:8080/v1/embeddings \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "llamadart-local",
+    "input": [
+      "llamadart supports local inference.",
+      "Embeddings are useful for semantic search."
+    ],
+    "encoding_format": "float"
+  }'
 ```
 
 ## Tests

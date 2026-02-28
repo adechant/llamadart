@@ -22,9 +22,13 @@ class GenerationGate {
     return true;
   }
 
-  /// Releases the generation slot and cancels generation on the engine.
-  void release() {
-    _engine.cancelGeneration();
+  /// Releases the generation slot.
+  ///
+  /// When [cancel] is true, also forwards a cancellation signal to the engine.
+  void release({bool cancel = true}) {
+    if (cancel) {
+      _engine.cancelGeneration();
+    }
     _isGenerating = false;
   }
 }

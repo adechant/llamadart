@@ -82,6 +82,63 @@ void main() {
     });
   });
 
+  group('parseEmbeddingsRequest', () {
+    test('parses single-string input with default encoding format', () {
+      final request = parseEmbeddingsRequest(<String, dynamic>{
+        'model': 'llamadart-local',
+        'input': 'hello world',
+      }, configuredModelId: 'llamadart-local');
+
+      expect(request.model, 'llamadart-local');
+      expect(request.inputs, <String>['hello world']);
+      expect(request.encodingFormat, 'float');
+    });
+
+    test('parses array input with explicit float format', () {
+      final request = parseEmbeddingsRequest(<String, dynamic>{
+        'model': 'llamadart-local',
+        'input': <String>['hello', 'world'],
+        'encoding_format': 'float',
+      }, configuredModelId: 'llamadart-local');
+
+      expect(request.inputs, <String>['hello', 'world']);
+      expect(request.encodingFormat, 'float');
+    });
+
+    test('throws for unsupported encoding format', () {
+      expect(
+        () => parseEmbeddingsRequest(<String, dynamic>{
+          'model': 'llamadart-local',
+          'input': 'hello',
+          'encoding_format': 'base64',
+        }, configuredModelId: 'llamadart-local'),
+        throwsA(
+          isA<OpenAiHttpException>().having(
+            (OpenAiHttpException error) => error.param,
+            'param',
+            'encoding_format',
+          ),
+        ),
+      );
+    });
+
+    test('throws when input is not string or string array', () {
+      expect(
+        () => parseEmbeddingsRequest(<String, dynamic>{
+          'model': 'llamadart-local',
+          'input': 123,
+        }, configuredModelId: 'llamadart-local'),
+        throwsA(
+          isA<OpenAiHttpException>().having(
+            (OpenAiHttpException error) => error.param,
+            'param',
+            'input',
+          ),
+        ),
+      );
+    });
+  });
+
   group('toOpenAiChatCompletionChunk', () {
     test('includes assistant role on first chunk', () {
       final chunk = LlamaCompletionChunk(
