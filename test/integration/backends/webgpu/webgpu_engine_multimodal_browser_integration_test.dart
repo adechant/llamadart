@@ -97,6 +97,51 @@ void main() {
       );
 
       bridge.setProperty(
+        'embed'.toJS,
+        ((String text, JSObject? options) {
+          var normalize = true;
+          if (options != null) {
+            final rawNormalize = options.getProperty('normalize'.toJS);
+            if (rawNormalize.isA<JSBoolean>()) {
+              normalize = (rawNormalize as JSBoolean).toDart;
+            }
+          }
+
+          final vector = <double>[
+            text.length.toDouble(),
+            normalize ? 1.0 : 0.0,
+          ];
+          return Future<JSArray>.value(
+            vector.map((value) => value.toJS).toList(growable: false).toJS,
+          ).toJS;
+        }).toJS,
+      );
+
+      bridge.setProperty(
+        'embedBatch'.toJS,
+        ((JSArray texts, JSObject? options) {
+          var normalize = true;
+          if (options != null) {
+            final rawNormalize = options.getProperty('normalize'.toJS);
+            if (rawNormalize.isA<JSBoolean>()) {
+              normalize = (rawNormalize as JSBoolean).toDart;
+            }
+          }
+
+          final vectors = JSArray();
+          for (int i = 0; i < texts.length; i++) {
+            final raw = texts.getProperty(i.toJS);
+            final text = raw.isA<JSString>() ? (raw as JSString).toDart : '';
+            final vector = JSArray();
+            vector.setProperty(0.toJS, text.length.toDouble().toJS);
+            vector.setProperty(1.toJS, (normalize ? 1.0 : 0.0).toJS);
+            vectors.setProperty(i.toJS, vector);
+          }
+          return Future<JSArray>.value(vectors).toJS;
+        }).toJS,
+      );
+
+      bridge.setProperty(
         'getModelMetadata'.toJS,
         (() {
           final meta = JSObject();
@@ -160,6 +205,25 @@ void main() {
 
       expect(output, contains('Hello'));
       expect(sawAudioPart, isTrue);
+    });
+
+    test('LlamaEngine embed and embedBatch work via web bridge', () async {
+      await engine.loadModelFromUrl(
+        'https://example.com/model.gguf',
+        modelParams: const ModelParams(contextSize: 1024),
+      );
+
+      final vector = await engine.embed('hello world');
+      expect(vector, <double>[11.0, 1.0]);
+
+      final rawVector = await engine.embed('hello world', normalize: false);
+      expect(rawVector, <double>[11.0, 0.0]);
+
+      final batch = await engine.embedBatch(const <String>['hello', 'dart']);
+      expect(batch, <List<double>>[
+        <double>[5.0, 1.0],
+        <double>[4.0, 1.0],
+      ]);
     });
   });
 }
