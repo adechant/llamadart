@@ -13,13 +13,15 @@ Use this by default. It handles model lifecycle, template routing, streaming, an
 chat history management.
 
 **Key Components:**
-- **`LlamaEngine`**: Loads/unloads models and runs stateless chat completions.
+- **`LlamaEngine`**: Loads/unloads models, runs generation, and can produce
+  embeddings.
 - **`ChatSession`**: Keeps message history for multi-turn conversation flows.
 
 **Advantages:**
 - **Simplicity**: Work with message/content objects instead of low-level backend calls.
 - **Template-aware**: Uses model chat templates and parsing behavior automatically.
 - **Tool support**: Works with structured tool-call outputs.
+- **Embedding APIs**: `embed(...)` and `embedBatch(...)` on the same engine.
 
 ```dart
 import 'package:llamadart/llamadart.dart';

@@ -6,6 +6,20 @@ For canonical full release notes, use:
 
 - [`CHANGELOG.md`](https://github.com/leehack/llamadart/blob/main/CHANGELOG.md)
 
+## Unreleased
+
+- Added embedding APIs: `LlamaEngine.embed(...)` and
+  `LlamaEngine.embedBatch(...)`.
+- Added backend embedding capability interfaces for custom backend
+  implementations.
+- Added multi-sequence embedding batching support via
+  `ModelParams.maxParallelSequences` (`n_seq_max`).
+- Added native embedding benchmark tooling:
+  `tool/testing/native_embedding_benchmark.dart` and
+  `tool/testing/native_embedding_sweep.dart`.
+- Added website docs for embeddings and updated basic-app docs with embedding
+  examples.
+
 ## 0.6.4
 
 - Aligned multimodal projector offload with effective model-load settings,

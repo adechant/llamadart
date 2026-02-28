@@ -45,6 +45,20 @@ void main() {
       expect(req.parts, isEmpty);
     });
 
+    test('EmbedRequest', () {
+      final req = EmbedRequest(1, 'hello', true, sp);
+      expect(req.contextHandle, 1);
+      expect(req.text, 'hello');
+      expect(req.normalize, isTrue);
+    });
+
+    test('EmbedBatchRequest', () {
+      final req = EmbedBatchRequest(1, const ['a', 'b'], false, sp);
+      expect(req.contextHandle, 1);
+      expect(req.texts, const ['a', 'b']);
+      expect(req.normalize, isFalse);
+    });
+
     test('TokenizeRequest', () {
       final req = TokenizeRequest(1, 'text', true, sp);
       expect(req.text, 'text');
@@ -119,6 +133,17 @@ void main() {
       expect(HandleResponse(1).handle, 1);
       expect(TokenResponse([1]).bytes, [1]);
       expect(TokenizeResponse([1]).tokens, [1]);
+      expect(EmbedResponse([0.1, 0.2]).embedding, [0.1, 0.2]);
+      expect(
+        EmbedBatchResponse([
+          [0.1],
+          [0.2],
+        ]).embeddings,
+        [
+          [0.1],
+          [0.2],
+        ],
+      );
       expect(DetokenizeResponse('t').text, 't');
       expect(MetadataResponse({'a': 'b'}).metadata, {'a': 'b'});
       expect(GetContextSizeResponse(10).size, 10);

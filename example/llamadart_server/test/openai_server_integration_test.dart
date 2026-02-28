@@ -54,6 +54,7 @@ void main() {
       expect(paths.containsKey('/docs'), isTrue);
       expect(paths.containsKey('/v1/models'), isTrue);
       expect(paths.containsKey('/v1/chat/completions'), isTrue);
+      expect(paths.containsKey('/v1/embeddings'), isTrue);
     });
 
     test('GET /docs serves Swagger UI HTML', () async {
@@ -95,6 +96,36 @@ void main() {
       expect(usage['completion_tokens'], 2);
       expect(usage['total_tokens'], 9);
       expect(fakeEngine.cancelCount, greaterThan(0));
+    });
+
+    test('POST /v1/embeddings returns OpenAI-shaped response', () async {
+      final response = await client.post(
+        server.uri('/v1/embeddings'),
+        headers: <String, String>{'Content-Type': 'application/json'},
+        body: jsonEncode(<String, dynamic>{
+          'model': 'test-model',
+          'input': <String>['hello world', 'goodbye'],
+          'encoding_format': 'float',
+        }),
+      );
+
+      expect(response.statusCode, 200);
+      final json = jsonDecode(response.body) as Map<String, dynamic>;
+
+      expect(json['object'], 'list');
+      expect(json['model'], 'test-model');
+
+      final data = json['data'] as List<dynamic>;
+      expect(data, hasLength(2));
+
+      final first = data.first as Map<String, dynamic>;
+      expect(first['object'], 'embedding');
+      expect(first['index'], 0);
+      expect(first['embedding'], isA<List<dynamic>>());
+
+      final usage = json['usage'] as Map<String, dynamic>;
+      expect(usage['prompt_tokens'], 3);
+      expect(usage['total_tokens'], 3);
     });
 
     test(
@@ -171,6 +202,11 @@ void main() {
       final chatPost = chatPath['post'] as Map<String, dynamic>;
       final chatSecurity = chatPost['security'] as List<dynamic>;
       expect(chatSecurity, isNotEmpty);
+
+      final embeddingsPath = paths['/v1/embeddings'] as Map<String, dynamic>;
+      final embeddingsPost = embeddingsPath['post'] as Map<String, dynamic>;
+      final embeddingsSecurity = embeddingsPost['security'] as List<dynamic>;
+      expect(embeddingsSecurity, isNotEmpty);
     });
   });
 
@@ -393,6 +429,23 @@ class _FakeApiServerEngine implements ApiServerEngine {
   }
 
   @override
+  Future<List<double>> embed(String input, {bool normalize = true}) async {
+    return <double>[input.length.toDouble(), normalize ? 1.0 : 0.0];
+  }
+
+  @override
+  Future<List<List<double>>> embedBatch(
+    List<String> inputs, {
+    bool normalize = true,
+  }) async {
+    return inputs
+        .map(
+          (input) => <double>[input.length.toDouble(), normalize ? 1.0 : 0.0],
+        )
+        .toList(growable: false);
+  }
+
+  @override
   void cancelGeneration() {
     cancelCount++;
   }
@@ -511,6 +564,23 @@ class _ToolLoopApiServerEngine implements ApiServerEngine {
   @override
   Future<int> getTokenCount(String text) async {
     return text.trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty).length;
+  }
+
+  @override
+  Future<List<double>> embed(String input, {bool normalize = true}) async {
+    return <double>[input.length.toDouble(), normalize ? 1.0 : 0.0];
+  }
+
+  @override
+  Future<List<List<double>>> embedBatch(
+    List<String> inputs, {
+    bool normalize = true,
+  }) async {
+    return inputs
+        .map(
+          (input) => <double>[input.length.toDouble(), normalize ? 1.0 : 0.0],
+        )
+        .toList(growable: false);
   }
 
   @override

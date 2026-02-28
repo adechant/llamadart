@@ -49,6 +49,19 @@ class LlamaApiServerEngine implements ApiServerEngine {
   }
 
   @override
+  Future<List<double>> embed(String input, {bool normalize = true}) {
+    return engine.embed(input, normalize: normalize);
+  }
+
+  @override
+  Future<List<List<double>>> embedBatch(
+    List<String> inputs, {
+    bool normalize = true,
+  }) {
+    return engine.embedBatch(inputs, normalize: normalize);
+  }
+
+  @override
   void cancelGeneration() {
     engine.cancelGeneration();
   }

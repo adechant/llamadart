@@ -62,6 +62,14 @@ class ModelParams {
   /// Set to 0 (or negative) to default to [batchSize].
   final int microBatchSize;
 
+  /// Maximum parallel sequence slots in context memory (n_seq_max).
+  ///
+  /// Values greater than 1 allow true multi-sequence batching (for example,
+  /// embedding batches with independent sequence IDs).
+  ///
+  /// Set to 1 to preserve single-sequence behavior.
+  final int maxParallelSequences;
+
   /// Maximum number of GPU layers to safely offload all layers.
   static const int maxGpuLayers = 999;
 
@@ -76,6 +84,7 @@ class ModelParams {
     this.numberOfThreadsBatch = 0,
     this.batchSize = 0,
     this.microBatchSize = 0,
+    this.maxParallelSequences = 1,
   });
 
   /// Creates a copy of this [ModelParams] with updated fields.
@@ -89,6 +98,7 @@ class ModelParams {
     int? numberOfThreadsBatch,
     int? batchSize,
     int? microBatchSize,
+    int? maxParallelSequences,
   }) {
     return ModelParams(
       contextSize: contextSize ?? this.contextSize,
@@ -100,6 +110,7 @@ class ModelParams {
       numberOfThreadsBatch: numberOfThreadsBatch ?? this.numberOfThreadsBatch,
       batchSize: batchSize ?? this.batchSize,
       microBatchSize: microBatchSize ?? this.microBatchSize,
+      maxParallelSequences: maxParallelSequences ?? this.maxParallelSequences,
     );
   }
 }

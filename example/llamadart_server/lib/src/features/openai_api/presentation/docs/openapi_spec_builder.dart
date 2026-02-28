@@ -5,6 +5,7 @@ const _openApiTags = <Map<String, String>>[
   <String, String>{'name': 'System'},
   <String, String>{'name': 'Models'},
   <String, String>{'name': 'Chat'},
+  <String, String>{'name': 'Embeddings'},
   <String, String>{'name': 'Docs'},
 ];
 

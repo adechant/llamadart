@@ -23,6 +23,7 @@ GGUF files across native and web targets.
 - First setup: [Installation](./getting-started/installation)
 - First inference: [Quickstart](./getting-started/quickstart)
 - Multi-turn chat: [First Chat Session](./getting-started/first-chat-session)
+- Embedding pipelines: [Embeddings](./guides/embeddings)
 - Function calling: [Tool Calling](./guides/tool-calling)
 - Template diagnostics: [Chat Templates and Parsing](./guides/chat-template-and-parsing)
 - Template internals: [Template Engine Internals](./guides/template-engine-internals)

@@ -930,6 +930,52 @@ class LlamaEngine {
   }
 
   // ============================================================
+  // EMBEDDINGS
+  // ============================================================
+
+  /// Generates a single embedding vector for [text].
+  ///
+  /// When [normalize] is true, the returned vector is L2-normalized.
+  Future<List<double>> embed(String text, {bool normalize = true}) {
+    _ensureReady();
+    final embeddingBackend = _resolveEmbeddingBackend();
+    return embeddingBackend.embed(_contextHandle!, text, normalize: normalize);
+  }
+
+  /// Generates embedding vectors for all [texts] in order.
+  ///
+  /// When [normalize] is true, each returned vector is L2-normalized.
+  Future<List<List<double>>> embedBatch(
+    List<String> texts, {
+    bool normalize = true,
+  }) async {
+    _ensureReady();
+    if (texts.isEmpty) {
+      return const <List<double>>[];
+    }
+
+    final embeddingBackend = _resolveEmbeddingBackend();
+    if (embeddingBackend is BackendBatchEmbeddings) {
+      return embeddingBackend.embedBatch(
+        _contextHandle!,
+        texts,
+        normalize: normalize,
+      );
+    }
+
+    final vectors = <List<double>>[];
+    for (final text in texts) {
+      final vector = await embeddingBackend.embed(
+        _contextHandle!,
+        text,
+        normalize: normalize,
+      );
+      vectors.add(vector);
+    }
+    return vectors;
+  }
+
+  // ============================================================
   // MODEL INTROSPECTION
   // ============================================================
 
@@ -1041,6 +1087,17 @@ class LlamaEngine {
     final metadata = await getMetadata();
     _cachedModelMetadata = Map<String, String>.from(metadata);
     return Map<String, String>.from(_cachedModelMetadata!);
+  }
+
+  BackendEmbeddings _resolveEmbeddingBackend() {
+    final candidate = backend;
+    if (candidate is BackendEmbeddings) {
+      return candidate as BackendEmbeddings;
+    }
+
+    throw LlamaUnsupportedException(
+      'Embeddings are not supported by the active backend.',
+    );
   }
 
   bool _mayNeedStructuredPartialParse(String token) {

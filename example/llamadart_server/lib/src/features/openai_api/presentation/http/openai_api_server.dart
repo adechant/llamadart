@@ -1,9 +1,11 @@
 import 'package:relic/relic.dart';
 
 import '../../../chat_completion/chat_completion.dart';
+import '../../../embeddings/embeddings.dart';
 import '../../../server_engine/server_engine.dart';
 import '../docs/docs.dart';
 import 'handlers/chat_completions_handler.dart';
+import 'handlers/embeddings_handler.dart';
 import 'handlers/system_handlers.dart';
 import 'middleware.dart';
 import 'routes/openai_routes.dart';
@@ -36,6 +38,7 @@ class OpenAiApiServer {
   final String _swaggerUiHtml;
 
   final ChatCompletionService _chatCompletionService;
+  final EmbeddingsService _embeddingsService;
   final GenerationGate _generationGate;
 
   late final OpenAiSystemHandlers _systemHandlers = OpenAiSystemHandlers(
@@ -54,6 +57,12 @@ class OpenAiApiServer {
         chatCompletionService: _chatCompletionService,
         generationGate: _generationGate,
       );
+
+  late final EmbeddingsHandler _embeddingsHandler = EmbeddingsHandler(
+    modelId: modelId,
+    embeddingsService: _embeddingsService,
+    generationGate: _generationGate,
+  );
 
   /// Creates a server wrapper around [engine].
   OpenAiApiServer({
@@ -76,6 +85,7 @@ class OpenAiApiServer {
          toolInvoker: toolInvoker,
          maxToolRounds: maxToolRounds,
        ),
+       _embeddingsService = EmbeddingsService(engine: engine),
        _generationGate = GenerationGate(engine);
 
   /// Builds and configures a [RelicApp] instance.
@@ -94,6 +104,7 @@ class OpenAiApiServer {
       app,
       systemHandlers: _systemHandlers,
       chatCompletionsHandler: _chatCompletionsHandler,
+      embeddingsHandler: _embeddingsHandler,
     );
 
     return app;

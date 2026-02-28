@@ -11,5 +11,7 @@ void main() {
 
     expect(backend, isA<LlamaBackend>());
     expect(backend, isA<WebAutoBackend>());
+    expect(backend, isA<BackendEmbeddings>());
+    expect(backend, isA<BackendBatchEmbeddings>());
   });
 }

@@ -9,7 +9,8 @@ import '../webgpu/webgpu_backend.dart';
 LlamaBackend createBackend() => WebAutoBackend();
 
 /// Uses the unified web backend implementation.
-class WebAutoBackend implements LlamaBackend, BackendAvailability {
+class WebAutoBackend
+    implements LlamaBackend, BackendAvailability, BackendBatchEmbeddings {
   final LlamaBackend _delegate;
 
   /// Creates a web backend router.
@@ -68,6 +69,63 @@ class WebAutoBackend implements LlamaBackend, BackendAvailability {
   @override
   void cancelGeneration() {
     _delegate.cancelGeneration();
+  }
+
+  @override
+  Future<List<double>> embed(
+    int contextHandle,
+    String text, {
+    bool normalize = true,
+  }) {
+    final delegate = _delegate;
+    if (delegate is BackendEmbeddings) {
+      return (delegate as BackendEmbeddings).embed(
+        contextHandle,
+        text,
+        normalize: normalize,
+      );
+    }
+    throw UnsupportedError(
+      'Embeddings are not supported by the active web backend.',
+    );
+  }
+
+  @override
+  Future<List<List<double>>> embedBatch(
+    int contextHandle,
+    List<String> texts, {
+    bool normalize = true,
+  }) async {
+    if (texts.isEmpty) {
+      return const <List<double>>[];
+    }
+
+    final delegate = _delegate;
+    if (delegate is BackendBatchEmbeddings) {
+      return (delegate as BackendBatchEmbeddings).embedBatch(
+        contextHandle,
+        texts,
+        normalize: normalize,
+      );
+    }
+
+    if (delegate is BackendEmbeddings) {
+      final vectors = <List<double>>[];
+      for (final text in texts) {
+        vectors.add(
+          await (delegate as BackendEmbeddings).embed(
+            contextHandle,
+            text,
+            normalize: normalize,
+          ),
+        );
+      }
+      return vectors;
+    }
+
+    throw UnsupportedError(
+      'Embeddings are not supported by the active web backend.',
+    );
   }
 
   @override

@@ -82,6 +82,32 @@ Future<void> main() async {
 }
 ```
 
+### 5. Generate embeddings
+
+```dart
+import 'package:llamadart/llamadart.dart';
+
+Future<void> main() async {
+  final engine = LlamaEngine(LlamaBackend());
+  try {
+    await engine.loadModel('path/to/embedding-model.gguf');
+
+    final vector = await engine.embed('hello world');
+    final batch = await engine.embedBatch([
+      'semantic search',
+      'document retrieval',
+    ]);
+
+    print('Single embedding dims: ${vector.length}');
+    print('Batch size: ${batch.length}');
+  } finally {
+    await engine.dispose();
+  }
+}
+```
+
+Note: embedding support depends on backend/runtime capabilities.
+
 ---
 
 ## ✅ Platform Defaults and Configurability
@@ -612,6 +638,12 @@ dart pub global run coverage:format_coverage --lcov --in=coverage/test --out=cov
 
 # Enforce >=70% threshold
 dart run tool/testing/check_lcov_threshold.dart coverage/lcov.info 70
+
+# Benchmark embedding throughput (sequential vs batch)
+dart run tool/testing/native_embedding_benchmark.dart --model path/to/model.gguf --cpu --mode both --input-count 8 --max-seq 8
+
+# Sweep max-seq and export CSV for plotting
+dart run tool/testing/native_embedding_sweep.dart --model path/to/model.gguf --cpu --max-seq-values 1,2,4,8 --csv-out embedding_speedup.csv
 ```
 
 ---

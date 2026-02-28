@@ -135,3 +135,27 @@ abstract class BackendRuntimeDiagnostics {
   /// after backend policy/fallback decisions.
   Future<int?> getResolvedGpuLayers();
 }
+
+/// Optional backend capability for generating text embeddings.
+abstract class BackendEmbeddings {
+  /// Generates a single embedding vector for [text].
+  ///
+  /// When [normalize] is true, the backend returns an L2-normalized vector.
+  Future<List<double>> embed(
+    int contextHandle,
+    String text, {
+    bool normalize = true,
+  });
+}
+
+/// Optional backend capability for batching embedding requests.
+abstract class BackendBatchEmbeddings extends BackendEmbeddings {
+  /// Generates embedding vectors for all [texts] in order.
+  ///
+  /// When [normalize] is true, each returned vector is L2-normalized.
+  Future<List<List<double>>> embedBatch(
+    int contextHandle,
+    List<String> texts, {
+    bool normalize = true,
+  });
+}

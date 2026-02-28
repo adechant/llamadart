@@ -5,6 +5,7 @@ import 'dart:io';
 
 import 'package:llamadart/src/backends/llama_cpp/llama_cpp_service.dart';
 import 'package:llamadart/src/core/models/config/gpu_backend.dart';
+import 'package:llamadart/src/core/models/inference/generation_params.dart';
 import 'package:llamadart/src/core/models/inference/model_params.dart';
 import 'package:path/path.dart' as path;
 import 'package:test/test.dart';
@@ -13,6 +14,118 @@ void main() {
   test('LlamaCppService can be instantiated', () {
     final service = LlamaCppService();
     expect(service, isA<LlamaCppService>());
+  });
+
+  group('loadModel preflight validation', () {
+    late Directory tempDir;
+
+    setUp(() {
+      tempDir = Directory.systemTemp.createTempSync('llamadart-loadmodel-');
+    });
+
+    tearDown(() {
+      if (tempDir.existsSync()) {
+        tempDir.deleteSync(recursive: true);
+      }
+    });
+
+    test('throws when model file does not exist', () {
+      final service = LlamaCppService();
+      final missingPath = path.join(tempDir.path, 'missing.gguf');
+
+      expect(
+        () => service.loadModel(missingPath, const ModelParams()),
+        throwsA(isA<Exception>()),
+      );
+    });
+
+    test('throws when model file is empty', () {
+      final service = LlamaCppService();
+      final emptyFile = File(path.join(tempDir.path, 'empty.gguf'))
+        ..writeAsBytesSync(const <int>[]);
+
+      expect(
+        () => service.loadModel(emptyFile.path, const ModelParams()),
+        throwsA(isA<Exception>()),
+      );
+    });
+
+    test('throws when model file does not look like GGUF', () {
+      final service = LlamaCppService();
+      final badFile = File(path.join(tempDir.path, 'bad.gguf'))
+        ..writeAsBytesSync(const <int>[0x00, 0x01, 0x02, 0x03]);
+
+      expect(
+        () => service.loadModel(badFile.path, const ModelParams()),
+        throwsA(isA<Exception>()),
+      );
+    });
+  });
+
+  group('invalid-handle guard rails', () {
+    late LlamaCppService service;
+
+    setUp(() {
+      service = LlamaCppService();
+    });
+
+    test('createContext throws for unknown model handle', () {
+      expect(
+        () => service.createContext(-1, const ModelParams()),
+        throwsA(isA<Exception>()),
+      );
+    });
+
+    test('generate stream reports error for unknown context handle', () async {
+      expect(
+        service
+            .generate(-1, 'hello', const GenerationParams(), 0)
+            .drain<void>(),
+        throwsA(isA<Exception>()),
+      );
+    });
+
+    test('embed and embedBatch throw for unknown context handle', () {
+      expect(() => service.embed(-1, 'hello'), throwsA(isA<Exception>()));
+      expect(
+        () => service.embedBatch(-1, const <String>['hello']),
+        throwsA(isA<Exception>()),
+      );
+    });
+
+    test('createMultimodalContext throws for unknown model handle', () {
+      expect(
+        () => service.createMultimodalContext(-1, 'mmproj.gguf'),
+        throwsA(isA<Exception>()),
+      );
+    });
+
+    test(
+      'token and metadata methods return safe defaults for unknown model',
+      () {
+        expect(service.tokenize(-1, 'hello', true), isEmpty);
+        expect(service.detokenize(-1, const <int>[1, 2, 3], false), isEmpty);
+        expect(service.getMetadata(-1), isEmpty);
+      },
+    );
+
+    test(
+      'state/introspection methods return safe defaults before model load',
+      () {
+        expect(service.getContextSize(-1), 0);
+        expect(service.hasMultimodalContext(-1), isFalse);
+        expect(service.getResolvedGpuLayers(), isNull);
+        expect(service.getActiveBackendName(), 'CPU');
+        expect(service.getAvailableBackendInfo(), contains('CPU'));
+      },
+    );
+
+    test('handleLora and free methods are no-op for unknown handles', () {
+      service.handleLora(-1, '/tmp/a.lora', 0.5, 'set');
+      service.freeModel(-1);
+      service.freeContext(-1);
+      service.freeMultimodalContext(-1);
+    });
   });
 
   group('resolveGpuLayersForLoad', () {
@@ -319,6 +432,43 @@ void main() {
 
       expect(path.normalize(resolved!), path.normalize(dartToolLibDir.path));
     });
+
+    test('uses current directory when executable dir is not a bundle', () {
+      final currentDir = Directory(path.join(tempRoot.path, 'cwd'))
+        ..createSync(recursive: true);
+      _createWindowsBundleMarkerFiles(currentDir.path);
+
+      final resolved = LlamaCppService.resolveWindowsBackendModuleDirectory(
+        resolvedExecutablePath: path.join(tempRoot.path, 'dart.exe'),
+        currentDirectoryPath: currentDir.path,
+        environment: const {},
+      );
+
+      expect(path.normalize(resolved!), path.normalize(currentDir.path));
+    });
+
+    test(
+      'falls back to executable directory when no bundle can be detected',
+      () {
+        final exeDir = Directory(path.join(tempRoot.path, 'bin'))
+          ..createSync(recursive: true);
+        final resolved = LlamaCppService.resolveWindowsBackendModuleDirectory(
+          resolvedExecutablePath: path.join(exeDir.path, 'dart.exe'),
+          currentDirectoryPath: tempRoot.path,
+          environment: const {},
+        );
+
+        expect(path.normalize(resolved!), path.normalize(exeDir.path));
+      },
+    );
+  });
+
+  test('resolveBackendModuleDirectory returns null on unsupported hosts', () {
+    if (Platform.isAndroid || Platform.isLinux || Platform.isWindows) {
+      return;
+    }
+
+    expect(LlamaCppService.resolveBackendModuleDirectory(), isNull);
   });
 }
 

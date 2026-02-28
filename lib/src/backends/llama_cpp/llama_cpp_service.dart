@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:ffi/ffi.dart';
 import 'package:path/path.dart' as path;
@@ -1860,12 +1861,23 @@ class LlamaCppService {
       nCtx = llama_model_n_ctx_train(model.pointer);
     }
     final resolvedBatchSizes = resolveContextBatchSizes(params, nCtx);
+    final maxSeqLimit = llama_max_parallel_sequences();
+    final resolvedMaxParallelSequences = math.max(
+      1,
+      math.min(params.maxParallelSequences, maxSeqLimit),
+    );
 
     ctxParams.n_ctx = nCtx;
     ctxParams.n_batch = resolvedBatchSizes.batchSize;
     ctxParams.n_ubatch = resolvedBatchSizes.microBatchSize;
+    ctxParams.n_seq_max = resolvedMaxParallelSequences;
     ctxParams.n_threads = params.numberOfThreads;
     ctxParams.n_threads_batch = params.numberOfThreadsBatch;
+    if (resolvedMaxParallelSequences > 1) {
+      // Keep per-sequence context at full n_ctx when multiple sequence slots
+      // are enabled so regular generation behavior is unchanged.
+      ctxParams.kv_unified = true;
+    }
 
     final resolvedModelGpuLayers = _modelResolvedGpuLayers[modelHandle];
     if (shouldDisableContextGpuOffload(
@@ -2019,6 +2031,356 @@ class LlamaCppService {
     }
   }
 
+  /// Generates a single embedding vector for [text].
+  List<double> embed(int contextHandle, String text, {bool normalize = true}) {
+    final ctx = _contexts[contextHandle];
+    if (ctx == null) {
+      throw Exception('Invalid context handle');
+    }
+
+    final modelHandle = _contextToModel[contextHandle];
+    if (modelHandle == null) {
+      throw Exception('Invalid context handle');
+    }
+
+    final model = _models[modelHandle];
+    if (model == null) {
+      throw Exception('Invalid model handle');
+    }
+
+    final contextParams = _contextParams[contextHandle];
+    if (contextParams == null) {
+      throw Exception('Missing context parameters');
+    }
+
+    final hasEncoder = llama_model_has_encoder(model.pointer);
+    final hasDecoder = llama_model_has_decoder(model.pointer);
+    if (hasEncoder && hasDecoder) {
+      throw Exception(
+        'Embedding extraction for encoder-decoder models is not supported',
+      );
+    }
+    final useEncoderPath = hasEncoder && !hasDecoder;
+
+    final vocab = llama_model_get_vocab(model.pointer);
+    final nSeqCtx = llama_n_ctx_seq(ctx.pointer);
+    final tokens = _tokenizeEmbeddingText(vocab, text, nSeqCtx);
+    final configuredBatchSize = contextParams.n_batch > 0
+        ? contextParams.n_batch
+        : tokens.length;
+    final batchCapacity = math.max(
+      1,
+      math.min(configuredBatchSize, tokens.length),
+    );
+    final batch = llama_batch_init(batchCapacity, 0, 1);
+    final embeddingSize = _resolveEmbeddingDimension(model.pointer);
+
+    try {
+      llama_synchronize(ctx.pointer);
+      _clearContextMemory(ctx.pointer, strict: false);
+      ctx.cachedPromptTokens = null;
+      llama_set_embeddings(ctx.pointer, true);
+
+      var decodedTokens = 0;
+      while (decodedTokens < tokens.length) {
+        final remaining = tokens.length - decodedTokens;
+        final chunkTokenCount = math.min(batchCapacity, remaining);
+        batch.n_tokens = chunkTokenCount;
+
+        for (int i = 0; i < chunkTokenCount; i++) {
+          final tokenIndex = decodedTokens + i;
+          batch.token[i] = tokens[tokenIndex];
+          batch.pos[i] = tokenIndex;
+          batch.n_seq_id[i] = 1;
+          batch.seq_id[i][0] = 0;
+          batch.logits[i] = 1;
+        }
+
+        final status = useEncoderPath
+            ? llama_encode(ctx.pointer, batch)
+            : llama_decode(ctx.pointer, batch);
+        if (status != 0) {
+          throw Exception('Embedding forward pass failed');
+        }
+
+        decodedTokens += chunkTokenCount;
+      }
+
+      final poolingType = llama_pooling_type$1(ctx.pointer);
+      Pointer<Float> embeddingPtr;
+      if (poolingType == llama_pooling_type.LLAMA_POOLING_TYPE_NONE) {
+        embeddingPtr = llama_get_embeddings_ith(
+          ctx.pointer,
+          batch.n_tokens - 1,
+        );
+        if (embeddingPtr == nullptr) {
+          embeddingPtr = llama_get_embeddings(ctx.pointer);
+        }
+      } else {
+        embeddingPtr = llama_get_embeddings_seq(ctx.pointer, 0);
+        if (embeddingPtr == nullptr) {
+          embeddingPtr = llama_get_embeddings(ctx.pointer);
+        }
+      }
+
+      if (embeddingPtr == nullptr) {
+        throw Exception('Embedding output is unavailable');
+      }
+
+      final vector = List<double>.from(
+        embeddingPtr.asTypedList(embeddingSize),
+        growable: false,
+      );
+
+      if (!normalize) {
+        return vector;
+      }
+
+      return _normalizeEmbeddingVector(vector);
+    } finally {
+      llama_set_embeddings(ctx.pointer, false);
+      llama_batch_free(batch);
+    }
+  }
+
+  /// Generates embedding vectors for [texts] in input order.
+  List<List<double>> embedBatch(
+    int contextHandle,
+    List<String> texts, {
+    bool normalize = true,
+  }) {
+    if (texts.isEmpty) {
+      return const <List<double>>[];
+    }
+
+    final ctx = _contexts[contextHandle];
+    if (ctx == null) {
+      throw Exception('Invalid context handle');
+    }
+
+    final modelHandle = _contextToModel[contextHandle];
+    if (modelHandle == null) {
+      throw Exception('Invalid context handle');
+    }
+
+    final model = _models[modelHandle];
+    if (model == null) {
+      throw Exception('Invalid model handle');
+    }
+
+    final contextParams = _contextParams[contextHandle];
+    if (contextParams == null) {
+      throw Exception('Missing context parameters');
+    }
+
+    final hasEncoder = llama_model_has_encoder(model.pointer);
+    final hasDecoder = llama_model_has_decoder(model.pointer);
+    if (hasEncoder && hasDecoder) {
+      throw Exception(
+        'Embedding extraction for encoder-decoder models is not supported',
+      );
+    }
+    final useEncoderPath = hasEncoder && !hasDecoder;
+
+    final poolingType = llama_pooling_type$1(ctx.pointer);
+    final maxParallelSequences = llama_n_seq_max(ctx.pointer);
+    if (poolingType == llama_pooling_type.LLAMA_POOLING_TYPE_NONE ||
+        maxParallelSequences <= 1) {
+      final fallbackVectors = <List<double>>[];
+      for (final text in texts) {
+        fallbackVectors.add(embed(contextHandle, text, normalize: normalize));
+      }
+      return fallbackVectors;
+    }
+
+    final vocab = llama_model_get_vocab(model.pointer);
+    final nSeqCtx = llama_n_ctx_seq(ctx.pointer);
+    final configuredBatchSize = contextParams.n_batch > 0
+        ? contextParams.n_batch
+        : llama_n_ctx(ctx.pointer);
+    final batchCapacity = math.max(1, configuredBatchSize);
+    final embeddingSize = _resolveEmbeddingDimension(model.pointer);
+
+    final tokenizedInputs = <List<int>>[];
+    for (final text in texts) {
+      final tokens = _tokenizeEmbeddingText(vocab, text, nSeqCtx);
+      tokenizedInputs.add(tokens);
+    }
+
+    final vectors = List<List<double>?>.filled(texts.length, null);
+
+    int index = 0;
+    while (index < texts.length) {
+      final currentTokenCount = tokenizedInputs[index].length;
+
+      if (currentTokenCount > batchCapacity) {
+        vectors[index] = embed(
+          contextHandle,
+          texts[index],
+          normalize: normalize,
+        );
+        index += 1;
+        continue;
+      }
+
+      var groupTokenCount = 0;
+      final groupStart = index;
+      while (index < texts.length &&
+          (index - groupStart) < maxParallelSequences) {
+        final nextCount = tokenizedInputs[index].length;
+        if (nextCount > batchCapacity) {
+          break;
+        }
+
+        final nextTotal = groupTokenCount + nextCount;
+        if (groupTokenCount > 0 && nextTotal > batchCapacity) {
+          break;
+        }
+
+        groupTokenCount = nextTotal;
+        index += 1;
+      }
+
+      if (groupStart == index) {
+        vectors[index] = embed(
+          contextHandle,
+          texts[index],
+          normalize: normalize,
+        );
+        index += 1;
+        continue;
+      }
+
+      final groupSize = index - groupStart;
+      final batch = llama_batch_init(groupTokenCount, 0, groupSize);
+      try {
+        llama_synchronize(ctx.pointer);
+        _clearContextMemory(ctx.pointer, strict: false);
+        ctx.cachedPromptTokens = null;
+        llama_set_embeddings(ctx.pointer, true);
+
+        batch.n_tokens = groupTokenCount;
+
+        var tokenOffset = 0;
+        for (int sequence = 0; sequence < groupSize; sequence++) {
+          final tokens = tokenizedInputs[groupStart + sequence];
+          for (int pos = 0; pos < tokens.length; pos++) {
+            batch.token[tokenOffset] = tokens[pos];
+            batch.pos[tokenOffset] = pos;
+            batch.n_seq_id[tokenOffset] = 1;
+            batch.seq_id[tokenOffset][0] = sequence;
+            batch.logits[tokenOffset] = 1;
+            tokenOffset += 1;
+          }
+        }
+
+        final status = useEncoderPath
+            ? llama_encode(ctx.pointer, batch)
+            : llama_decode(ctx.pointer, batch);
+        if (status != 0) {
+          throw Exception('Batch embedding forward pass failed');
+        }
+
+        for (int sequence = 0; sequence < groupSize; sequence++) {
+          var embeddingPtr = llama_get_embeddings_seq(ctx.pointer, sequence);
+          if (embeddingPtr == nullptr && groupSize == 1) {
+            embeddingPtr = llama_get_embeddings(ctx.pointer);
+          }
+          if (embeddingPtr == nullptr) {
+            throw Exception('Batch embedding output is unavailable');
+          }
+
+          final vector = List<double>.from(
+            embeddingPtr.asTypedList(embeddingSize),
+            growable: false,
+          );
+          vectors[groupStart + sequence] = normalize
+              ? _normalizeEmbeddingVector(vector)
+              : vector;
+        }
+      } finally {
+        llama_set_embeddings(ctx.pointer, false);
+        llama_batch_free(batch);
+      }
+    }
+
+    return vectors.map((vector) => vector!).toList(growable: false);
+  }
+
+  List<int> _tokenizeEmbeddingText(
+    Pointer<llama_vocab> vocab,
+    String text,
+    int maxTokens,
+  ) {
+    final shouldAddSpecial = !_promptStartsWithBosToken(vocab, text);
+    final textPtr = text.toNativeUtf8();
+
+    final requiredTokenCount = -llama_tokenize(
+      vocab,
+      textPtr.cast(),
+      textPtr.length,
+      nullptr,
+      0,
+      shouldAddSpecial,
+      true,
+    );
+
+    if (requiredTokenCount <= 0 || requiredTokenCount > maxTokens) {
+      malloc.free(textPtr);
+      throw Exception('Failed to tokenize embedding input');
+    }
+
+    final tokensPtr = malloc<Int32>(requiredTokenCount);
+    try {
+      final actualTokenCount = llama_tokenize(
+        vocab,
+        textPtr.cast(),
+        textPtr.length,
+        tokensPtr,
+        requiredTokenCount,
+        shouldAddSpecial,
+        true,
+      );
+      if (actualTokenCount <= 0 || actualTokenCount > maxTokens) {
+        throw Exception('Failed to encode embedding input');
+      }
+
+      return List<int>.from(tokensPtr.asTypedList(actualTokenCount));
+    } finally {
+      malloc.free(tokensPtr);
+      malloc.free(textPtr);
+    }
+  }
+
+  int _resolveEmbeddingDimension(Pointer<llama_model> modelPointer) {
+    var embeddingSize = llama_model_n_embd_out(modelPointer);
+    if (embeddingSize <= 0) {
+      embeddingSize = llama_model_n_embd(modelPointer);
+    }
+    if (embeddingSize <= 0) {
+      throw Exception('Failed to resolve embedding dimension');
+    }
+    return embeddingSize;
+  }
+
+  List<double> _normalizeEmbeddingVector(List<double> vector) {
+    var normSquared = 0.0;
+    for (final value in vector) {
+      normSquared += value * value;
+    }
+
+    if (normSquared <= 0.0) {
+      return vector;
+    }
+
+    final scale = 1.0 / math.sqrt(normSquared);
+    final normalized = List<double>.filled(vector.length, 0.0, growable: false);
+    for (int i = 0; i < vector.length; i++) {
+      normalized[i] = vector[i] * scale;
+    }
+    return normalized;
+  }
+
   /// Helper: Resets the context state to be ready for new generation.
   _LlamaContextWrapper _resetContext(
     int contextHandle,
@@ -2036,10 +2398,16 @@ class LlamaCppService {
     return ctx;
   }
 
-  void _clearContextMemory(Pointer<llama_context> contextPointer) {
+  void _clearContextMemory(
+    Pointer<llama_context> contextPointer, {
+    bool strict = true,
+  }) {
     final memory = llama_get_memory(contextPointer);
     if (memory == nullptr) {
-      throw Exception("Failed to reset context memory");
+      if (strict) {
+        throw Exception("Failed to reset context memory");
+      }
+      return;
     }
 
     llama_memory_clear(memory, true);
