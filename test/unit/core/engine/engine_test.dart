@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:test/test.dart';
 import 'package:llamadart/llamadart.dart';
 
@@ -175,6 +176,59 @@ class MockLlamaBackend
   }
 }
 
+class MockEmbeddingBackend extends MockLlamaBackend
+    implements BackendEmbeddings {
+  int embedCalls = 0;
+
+  @override
+  Future<List<double>> embed(
+    int contextHandle,
+    String text, {
+    bool normalize = true,
+  }) async {
+    embedCalls += 1;
+    const tailX = 3.0;
+    const tailY = 4.0;
+    final vector = <double>[text.length.toDouble(), tailX, tailY];
+    if (!normalize) {
+      return vector;
+    }
+
+    final norm = math.sqrt(
+      vector[0] * vector[0] + tailX * tailX + tailY * tailY,
+    );
+    return <double>[vector[0] / norm, tailX / norm, tailY / norm];
+  }
+}
+
+class MockBatchEmbeddingBackend extends MockLlamaBackend
+    implements BackendBatchEmbeddings {
+  int embedCalls = 0;
+  int embedBatchCalls = 0;
+
+  @override
+  Future<List<double>> embed(
+    int contextHandle,
+    String text, {
+    bool normalize = true,
+  }) async {
+    embedCalls += 1;
+    return <double>[text.length.toDouble()];
+  }
+
+  @override
+  Future<List<List<double>>> embedBatch(
+    int contextHandle,
+    List<String> texts, {
+    bool normalize = true,
+  }) async {
+    embedBatchCalls += 1;
+    return texts
+        .map((text) => <double>[text.length.toDouble(), 99.0])
+        .toList(growable: false);
+  }
+}
+
 void main() {
   late MockLlamaBackend backend;
   late LlamaEngine engine;
@@ -247,6 +301,73 @@ void main() {
       expect(tokens, [1, 2, 3]);
       final text = await engine.detokenize(tokens);
       expect(text, 'decoded');
+    });
+
+    test('embed throws when not ready', () {
+      expect(
+        () => engine.embed('hello'),
+        throwsA(isA<LlamaContextException>()),
+      );
+    });
+
+    test('embed throws when backend does not support embeddings', () async {
+      await engine.loadModel('qwen-test.gguf');
+
+      expect(
+        () => engine.embed('hello'),
+        throwsA(isA<LlamaUnsupportedException>()),
+      );
+    });
+
+    test('embed returns normalized vector by default', () async {
+      final embeddingBackend = MockEmbeddingBackend();
+      final embeddingEngine = LlamaEngine(embeddingBackend);
+
+      await embeddingEngine.loadModel('qwen-test.gguf');
+      final vector = await embeddingEngine.embed('hello');
+
+      expect(vector.length, 3);
+      expect(vector[0], closeTo(0.7071067, 0.000001));
+      expect(vector[1], closeTo(0.4242640, 0.000001));
+      expect(vector[2], closeTo(0.5656854, 0.000001));
+      expect(embeddingBackend.embedCalls, 1);
+    });
+
+    test('embedBatch returns vectors for each input in order', () async {
+      final embeddingBackend = MockEmbeddingBackend();
+      final embeddingEngine = LlamaEngine(embeddingBackend);
+
+      await embeddingEngine.loadModel('qwen-test.gguf');
+      final vectors = await embeddingEngine.embedBatch(const [
+        'a',
+        'bb',
+        'ccc',
+      ], normalize: false);
+
+      expect(vectors, <List<double>>[
+        <double>[1.0, 3.0, 4.0],
+        <double>[2.0, 3.0, 4.0],
+        <double>[3.0, 3.0, 4.0],
+      ]);
+      expect(embeddingBackend.embedCalls, 3);
+    });
+
+    test('embedBatch uses backend batch capability when available', () async {
+      final embeddingBackend = MockBatchEmbeddingBackend();
+      final embeddingEngine = LlamaEngine(embeddingBackend);
+
+      await embeddingEngine.loadModel('qwen-test.gguf');
+      final vectors = await embeddingEngine.embedBatch(const [
+        'a',
+        'bb',
+      ], normalize: false);
+
+      expect(vectors, <List<double>>[
+        <double>[1.0, 99.0],
+        <double>[2.0, 99.0],
+      ]);
+      expect(embeddingBackend.embedBatchCalls, 1);
+      expect(embeddingBackend.embedCalls, 0);
     });
 
     test('chatTemplate', () async {

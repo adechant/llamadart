@@ -14,7 +14,12 @@ LlamaBackend createBackend() => NativeLlamaBackend();
 
 /// Native implementation of [LlamaBackend] using isolates and FFI.
 class NativeLlamaBackend
-    implements LlamaBackend, BackendAvailability, BackendRuntimeDiagnostics {
+    implements
+        LlamaBackend,
+        BackendAvailability,
+        BackendRuntimeDiagnostics,
+        BackendEmbeddings,
+        BackendBatchEmbeddings {
   Isolate? _isolate;
   SendPort? _sendPort;
   final ReceivePort _responsesPort = ReceivePort();
@@ -206,6 +211,49 @@ class NativeLlamaBackend
     rp.close();
     if (res is TokenizeResponse) return res.tokens;
     throw Exception("Tokenization failed");
+  }
+
+  @override
+  Future<List<double>> embed(
+    int contextHandle,
+    String text, {
+    bool normalize = true,
+  }) async {
+    await _ensureIsolate();
+    final rp = ReceivePort();
+    _sendPort!.send(EmbedRequest(contextHandle, text, normalize, rp.sendPort));
+    final res = await rp.first;
+    rp.close();
+    if (res is EmbedResponse) return res.embedding;
+    if (res is ErrorResponse) throw Exception(res.message);
+    throw Exception('Embedding failed');
+  }
+
+  @override
+  Future<List<List<double>>> embedBatch(
+    int contextHandle,
+    List<String> texts, {
+    bool normalize = true,
+  }) async {
+    if (texts.isEmpty) {
+      return const <List<double>>[];
+    }
+
+    await _ensureIsolate();
+    final rp = ReceivePort();
+    _sendPort!.send(
+      EmbedBatchRequest(
+        contextHandle,
+        List<String>.from(texts),
+        normalize,
+        rp.sendPort,
+      ),
+    );
+    final res = await rp.first;
+    rp.close();
+    if (res is EmbedBatchResponse) return res.embeddings;
+    if (res is ErrorResponse) throw Exception(res.message);
+    throw Exception('Batch embedding failed');
   }
 
   @override

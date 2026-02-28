@@ -29,6 +29,7 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'Advanced Features',
       items: [
+        'guides/embeddings',
         'guides/tool-calling',
         'guides/multimodal',
         'guides/lora-adapters'

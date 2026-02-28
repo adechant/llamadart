@@ -83,6 +83,41 @@ class GenerateRequest extends WorkerRequest {
   });
 }
 
+/// Request to generate an embedding vector.
+class EmbedRequest extends WorkerRequest {
+  /// The handle of the context.
+  final int contextHandle;
+
+  /// Text to encode as an embedding.
+  final String text;
+
+  /// Whether to L2-normalize the output vector.
+  final bool normalize;
+
+  /// Creates a new [EmbedRequest].
+  EmbedRequest(this.contextHandle, this.text, this.normalize, super.sendPort);
+}
+
+/// Request to generate embedding vectors in a single worker call.
+class EmbedBatchRequest extends WorkerRequest {
+  /// The handle of the context.
+  final int contextHandle;
+
+  /// Text inputs to encode as embeddings.
+  final List<String> texts;
+
+  /// Whether to L2-normalize each output vector.
+  final bool normalize;
+
+  /// Creates a new [EmbedBatchRequest].
+  EmbedBatchRequest(
+    this.contextHandle,
+    this.texts,
+    this.normalize,
+    super.sendPort,
+  );
+}
+
 /// Request to tokenize text.
 class TokenizeRequest extends WorkerRequest {
   /// The handle of the model.
@@ -297,6 +332,24 @@ class TokenizeResponse {
 
   /// Creates a new [TokenizeResponse].
   TokenizeResponse(this.tokens);
+}
+
+/// Response containing an embedding vector.
+class EmbedResponse {
+  /// Embedding values as doubles.
+  final List<double> embedding;
+
+  /// Creates a new [EmbedResponse].
+  EmbedResponse(this.embedding);
+}
+
+/// Response containing multiple embedding vectors.
+class EmbedBatchResponse {
+  /// Embedding values in input order.
+  final List<List<double>> embeddings;
+
+  /// Creates a new [EmbedBatchResponse].
+  EmbedBatchResponse(this.embeddings);
 }
 
 /// Response containing detokenized text.

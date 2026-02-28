@@ -66,6 +66,21 @@ dart run tool/testing/native_prompt_reuse_parity.dart \
   --max-prompts 8 \
   --runs 3 \
   --fail-on-mismatch
+
+# Benchmark embeddings (sequential vs batch)
+dart run tool/testing/native_embedding_benchmark.dart \
+  --model path/to/model.gguf \
+  --cpu \
+  --mode both \
+  --input-count 8 \
+  --max-seq 8
+
+# Sweep max-seq values and export CSV for plotting
+dart run tool/testing/native_embedding_sweep.dart \
+  --model path/to/model.gguf \
+  --cpu \
+  --max-seq-values 1,2,4,8 \
+  --csv-out embedding_speedup.csv
 ```
 
 - Validate memory behavior with your real context sizes.

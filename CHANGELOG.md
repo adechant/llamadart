@@ -1,3 +1,18 @@
+## Unreleased
+
+* **Embedding API (native backend capability)**:
+  * Added `LlamaEngine.embed(...)` and `LlamaEngine.embedBatch(...)` for direct vector generation.
+  * Added optional backend capability interface `BackendEmbeddings` for custom backend implementers.
+  * Added optional backend batch capability `BackendBatchEmbeddings` and worker-side batch embedding request/response path to reduce isolate round-trip overhead in `embedBatch(...)`.
+  * Added `ModelParams.maxParallelSequences` (`n_seq_max`) so contexts can reserve multiple sequence slots for true multi-sequence embedding batches.
+  * Wired native isolate/worker/service embedding flow to llama.cpp embedding outputs with optional L2 normalization.
+  * Added embedding-focused tests for engine behavior and worker message contracts.
+* **Examples/docs**:
+  * Added `example/basic_app/bin/llamadart_embedding_example.dart`.
+  * Updated example docs and top-level README with embedding usage snippets.
+  * Added `tool/testing/native_embedding_benchmark.dart` to compare sequential embedding calls vs `embedBatch(...)` throughput (with optional `--json-out`).
+  * Added `tool/testing/native_embedding_sweep.dart` to run max-seq sweeps and dump CSV speedup reports for plotting.
+
 ## 0.6.4
 
 * **Multimodal projector offload alignment**:

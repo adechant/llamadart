@@ -100,6 +100,22 @@ void llamaWorkerEntry(SendPort initialSendPort) {
               message.sendPort.send(ErrorResponse(e.toString()));
             }
 
+          case EmbedRequest():
+            final embedding = service.embed(
+              message.contextHandle,
+              message.text,
+              normalize: message.normalize,
+            );
+            message.sendPort.send(EmbedResponse(embedding));
+
+          case EmbedBatchRequest():
+            final embeddings = service.embedBatch(
+              message.contextHandle,
+              message.texts,
+              normalize: message.normalize,
+            );
+            message.sendPort.send(EmbedBatchResponse(embeddings));
+
           case TokenizeRequest():
             final tokens = service.tokenize(
               message.modelHandle,

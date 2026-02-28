@@ -70,6 +70,7 @@ void main() {
       'mistralai-Mistral-Nemo-Instruct-2407.jinja': ChatFormat.mistralNemo,
       'moonshotai-Kimi-K2.jinja': ChatFormat.kimiK2,
       'openai-gpt-oss-120b.jinja': ChatFormat.gptOss,
+      'stepfun-ai-Step-3.5-Flash.jinja': ChatFormat.hermes,
       'unsloth-Apriel-1.5.jinja': ChatFormat.hermes,
       'unsloth-mistral-Devstral-Small-2507.jinja': ChatFormat.ministral,
       'upstage-Solar-Open-100B.jinja': ChatFormat.solarOpen,

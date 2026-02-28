@@ -12,6 +12,7 @@ A clean, organized CLI application demonstrating the capabilities of the `llamad
 - **Structured Output**: Pass `--grammar` for GBNF-constrained generation.
 - **Tool Calling Test Mode**: Enable `--tool-test` to exercise function-calling flow.
 - **Sampling Controls**: Tune `--temp`, `--top-k`, `--top-p`, and `--penalty`.
+- **Embedding Demo**: Includes a dedicated embedding CLI example.
 
 ## Usage
 
@@ -47,6 +48,36 @@ Useful for scripting or quick queries.
 dart run -- -p "What is the capital of France?"
 ```
 
+### 5. Embedding Example
+
+Generate one or more embedding vectors from text input.
+
+```bash
+dart run bin/llamadart_embedding_example.dart -i "hello world" -i "rag"
+```
+
+For closer `llama.cpp` parity, force CPU and align runtime knobs:
+
+```bash
+dart run bin/llamadart_embedding_example.dart \
+  --cpu --ctx-size 2048 --threads 12 --threads-batch 12 \
+  --batch-size 2048 --ubatch-size 2048 --max-seq 2 \
+  -i "hello world" -i "semantic search"
+```
+
+Embedding CLI flags (`bin/llamadart_embedding_example.dart`):
+
+- `-m, --model`: Path or URL to GGUF model.
+- `-i, --input`: Input text (repeat for batch embedding).
+- `--[no-]normalize`: Toggle L2 normalization.
+- `--cpu`: Force CPU backend.
+- `--ctx-size`: Context size.
+- `--threads`: Decode threads.
+- `--threads-batch`: Batch threads.
+- `--batch-size`: `n_batch` override.
+- `--ubatch-size`: `n_ubatch` override.
+- `--max-seq`: `n_seq_max` override for parallel embedding slots.
+
 ## Options
 
 - `-m, --model`: Path or URL to the GGUF model file.
@@ -73,6 +104,7 @@ dart test
 ## Project Structure
 
 - **`bin/llamadart_basic_example.dart`**: The CLI entry point and user interface logic.
+- **`bin/llamadart_embedding_example.dart`**: Embedding-only CLI entry point.
 - **`lib/services/llama_service.dart`**: High-level wrapper for the `llamadart` engine.
 - **`lib/services/model_service.dart`**: Handles model downloading and path verification.
 - **`lib/models.dart`**: Data structures for the application.

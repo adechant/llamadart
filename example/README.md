@@ -10,6 +10,7 @@ A simple console application showing:
 - Context creation
 - Tokenization
 - Text generation
+- Embedding generation
 - Resource cleanup
 
 **Best for:** Understanding the core API
@@ -19,6 +20,9 @@ A simple console application showing:
 cd basic_app
 dart pub get
 dart run
+
+# Embedding demo
+dart run bin/llamadart_embedding_example.dart -i "hello world"
 ```
 
 ### 2. Chat App (`chat_app/`)

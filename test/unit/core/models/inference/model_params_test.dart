@@ -8,6 +8,7 @@ void main() {
 
     expect(params.batchSize, 0);
     expect(params.microBatchSize, 0);
+    expect(params.maxParallelSequences, 1);
   });
 
   test('ModelParams copyWith updates selected fields', () {
@@ -17,6 +18,7 @@ void main() {
       preferredBackend: GpuBackend.metal,
       batchSize: 256,
       microBatchSize: 64,
+      maxParallelSequences: 8,
     );
 
     expect(updated.contextSize, 1024);
@@ -24,5 +26,6 @@ void main() {
     expect(updated.preferredBackend, GpuBackend.metal);
     expect(updated.batchSize, 256);
     expect(updated.microBatchSize, 64);
+    expect(updated.maxParallelSequences, 8);
   });
 }

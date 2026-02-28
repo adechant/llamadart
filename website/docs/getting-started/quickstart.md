@@ -46,8 +46,22 @@ await for (final chunk in engine.create(messages)) {
 }
 ```
 
+## Embeddings (single and batch)
+
+```dart
+final single = await engine.embed('hello world');
+final batch = await engine.embedBatch([
+  'semantic search',
+  'document retrieval',
+]);
+
+print('single dims=${single.length}');
+print('batch size=${batch.length}');
+```
+
 ## Next steps
 
 - Use [First Chat Session](./first-chat-session) for automatic history.
+- Build retrieval flows with [Embeddings](../guides/embeddings).
 - Tune [Runtime Parameters](../configuration/runtime-parameters).
 - Add tools with [Tool Calling](../guides/tool-calling).
