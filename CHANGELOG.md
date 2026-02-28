@@ -13,8 +13,9 @@
   * Added `tool/testing/native_embedding_benchmark.dart` to compare sequential embedding calls vs `embedBatch(...)` throughput (with optional `--json-out`).
   * Added `tool/testing/native_embedding_sweep.dart` to run max-seq sweeps and dump CSV speedup reports for plotting.
 * **Web bridge sync**:
-  * Updated default web bridge asset pinning to `leehack/llama-web-bridge-assets@v0.1.6` (built against llama.cpp `b8157`).
-  * Validated the `v0.1.6` bridge bundle through local fetch-script checksum verification.
+  * Added WebGPU bridge embedding APIs and wired web backend support for `LlamaEngine.embed(...)` / `embedBatch(...)`.
+  * Updated default web bridge asset pinning to `leehack/llama-web-bridge-assets@v0.1.7` (built against llama.cpp `b8157`).
+  * Validated the `v0.1.7` bridge bundle through local fetch-script checksum verification.
 
 ## 0.6.4
 

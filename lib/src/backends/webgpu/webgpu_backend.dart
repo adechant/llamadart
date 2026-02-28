@@ -18,7 +18,8 @@ import 'interop.dart';
 external JSArray _objectKeys(JSObject obj);
 
 /// Web backend backed by the llama.cpp bridge runtime.
-class WebGpuLlamaBackend implements LlamaBackend, BackendAvailability {
+class WebGpuLlamaBackend
+    implements LlamaBackend, BackendAvailability, BackendBatchEmbeddings {
   static const Duration _bridgeReadyTimeout = Duration(seconds: 12);
   static const Duration _bridgePollInterval = Duration(milliseconds: 100);
   static const int _remoteFetchChunkBytes = 256 * 1024;
@@ -1079,6 +1080,64 @@ class WebGpuLlamaBackend implements LlamaBackend, BackendAvailability {
     return const <int>[];
   }
 
+  List<double> _parseEmbeddingVector(JSAny? value) {
+    if (value == null) {
+      return const <double>[];
+    }
+
+    if (value.isA<JSFloat32Array>()) {
+      return List<double>.from(
+        (value as JSFloat32Array).toDart,
+        growable: false,
+      );
+    }
+
+    if (value.isA<JSFloat64Array>()) {
+      return List<double>.from(
+        (value as JSFloat64Array).toDart,
+        growable: false,
+      );
+    }
+
+    if (value.isA<JSArray>()) {
+      final arr = value as JSArray;
+      final out = <double>[];
+      for (int i = 0; i < arr.length; i++) {
+        final item = arr.getProperty(i.toJS);
+        if (item.isA<JSNumber>()) {
+          out.add((item as JSNumber).toDartDouble);
+        }
+      }
+      return out;
+    }
+
+    return const <double>[];
+  }
+
+  List<List<double>> _parseEmbeddingBatch(JSAny? value) {
+    if (value == null || !value.isA<JSArray>()) {
+      return const <List<double>>[];
+    }
+
+    final arr = value as JSArray;
+    final out = <List<double>>[];
+    for (int i = 0; i < arr.length; i++) {
+      out.add(_parseEmbeddingVector(arr.getProperty(i.toJS)));
+    }
+    return out;
+  }
+
+  bool _isEmbeddingMethodUnavailableError(Object error) {
+    final lowered = _errorText(error).toLowerCase();
+    return lowered.contains('embed is not a function') ||
+        lowered.contains('embedbatch is not a function') ||
+        lowered.contains('bridge.embed is not a function') ||
+        lowered.contains('bridge.embedbatch is not a function') ||
+        lowered.contains('llamadart_webgpu_embed_to_json') ||
+        lowered.contains('unknown function') &&
+            lowered.contains('embed_to_json');
+  }
+
   JSArray? _buildMultimodalParts(List<LlamaContentPart>? parts) {
     if (parts == null || parts.isEmpty) {
       return null;
@@ -1237,6 +1296,61 @@ class WebGpuLlamaBackend implements LlamaBackend, BackendAvailability {
   void cancelGeneration() {
     _abortController?.abort();
     _bridge?.cancel();
+  }
+
+  @override
+  Future<List<double>> embed(
+    int contextHandle,
+    String text, {
+    bool normalize = true,
+  }) async {
+    final bridge = _requireBridge();
+    try {
+      final result = await _toFuture(
+        bridge.embed(text, WebGpuEmbeddingOptions(normalize: normalize)),
+      );
+      return _parseEmbeddingVector(result);
+    } catch (error) {
+      if (_isEmbeddingMethodUnavailableError(error)) {
+        throw UnsupportedError(
+          'Web embeddings require bridge assets with embedding support '
+          '(v0.1.7 or newer).',
+        );
+      }
+      rethrow;
+    }
+  }
+
+  @override
+  Future<List<List<double>>> embedBatch(
+    int contextHandle,
+    List<String> texts, {
+    bool normalize = true,
+  }) async {
+    if (texts.isEmpty) {
+      return const <List<double>>[];
+    }
+
+    final bridge = _requireBridge();
+    final jsTexts = texts.map((text) => text.toJS).toList(growable: false).toJS;
+    try {
+      final result = await _toFuture(
+        bridge.embedBatch(
+          jsTexts,
+          WebGpuEmbeddingOptions(normalize: normalize),
+        ),
+      );
+      return _parseEmbeddingBatch(result);
+    } catch (error) {
+      if (_isEmbeddingMethodUnavailableError(error)) {
+        final vectors = <List<double>>[];
+        for (final text in texts) {
+          vectors.add(await embed(contextHandle, text, normalize: normalize));
+        }
+        return vectors;
+      }
+      rethrow;
+    }
   }
 
   Future<JSAny?> _toFuture(JSAny? value) async {

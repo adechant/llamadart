@@ -51,6 +51,18 @@ extension type LlamaWebGpuBridge._(JSObject _) implements JSObject {
   /// Detokenizes token ids.
   external JSPromise<JSString>? detokenize(JSArray tokens, [bool? special]);
 
+  /// Generates a single embedding vector for [text].
+  external JSPromise<JSAny?>? embed(
+    String text, [
+    WebGpuEmbeddingOptions? options,
+  ]);
+
+  /// Generates embedding vectors for all input texts.
+  external JSPromise<JSAny?>? embedBatch(
+    JSArray texts, [
+    WebGpuEmbeddingOptions? options,
+  ]);
+
   /// Returns model metadata as a plain JS object.
   external JSObject? getModelMetadata();
 
@@ -148,4 +160,12 @@ extension type WebGpuCompletionOptions._(JSObject _) implements JSObject {
     JSArray? parts,
     JSAny? signal,
   });
+}
+
+/// Embedding options.
+@JS()
+@anonymous
+extension type WebGpuEmbeddingOptions._(JSObject _) implements JSObject {
+  /// Creates embedding options.
+  external factory WebGpuEmbeddingOptions({bool? normalize});
 }

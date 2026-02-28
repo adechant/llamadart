@@ -135,6 +135,52 @@ void main() {
       );
 
       bridge.setProperty(
+        'embed'.toJS,
+        ((String text, JSObject? options) {
+          var normalize = true;
+          if (options != null) {
+            final rawNormalize = options.getProperty('normalize'.toJS);
+            if (rawNormalize.isA<JSBoolean>()) {
+              normalize = (rawNormalize as JSBoolean).toDart;
+            }
+          }
+
+          final vector = <double>[
+            text.length.toDouble(),
+            normalize ? 1.0 : 0.0,
+          ];
+          return Future<JSArray>.value(
+            vector.map((value) => value.toJS).toList(growable: false).toJS,
+          ).toJS;
+        }).toJS,
+      );
+
+      bridge.setProperty(
+        'embedBatch'.toJS,
+        ((JSArray texts, JSObject? options) {
+          var normalize = true;
+          if (options != null) {
+            final rawNormalize = options.getProperty('normalize'.toJS);
+            if (rawNormalize.isA<JSBoolean>()) {
+              normalize = (rawNormalize as JSBoolean).toDart;
+            }
+          }
+
+          final vectors = JSArray();
+          for (int i = 0; i < texts.length; i++) {
+            final raw = texts.getProperty(i.toJS);
+            final text = raw.isA<JSString>() ? (raw as JSString).toDart : '';
+            final vector = JSArray();
+            vector.setProperty(0.toJS, text.length.toDouble().toJS);
+            vector.setProperty(1.toJS, (normalize ? 1.0 : 0.0).toJS);
+            vectors.setProperty(i.toJS, vector);
+          }
+
+          return Future<JSArray>.value(vectors).toJS;
+        }).toJS,
+      );
+
+      bridge.setProperty(
         'getModelMetadata'.toJS,
         (() {
           final meta = JSObject();
@@ -203,6 +249,75 @@ void main() {
 
       expect(chunks, isNotEmpty);
       expect(chunks.first, <int>[72, 101, 108, 108, 111]);
+    });
+
+    test('generates embedding vector from bridge', () async {
+      await backend.modelLoadFromUrl(
+        'https://example.com/model.gguf',
+        const ModelParams(),
+      );
+
+      final vector = await backend.embed(1, 'hello world');
+      expect(vector, <double>[11.0, 1.0]);
+
+      final rawVector = await backend.embed(1, 'hello world', normalize: false);
+      expect(rawVector, <double>[11.0, 0.0]);
+    });
+
+    test('generates embedding batch from bridge', () async {
+      await backend.modelLoadFromUrl(
+        'https://example.com/model.gguf',
+        const ModelParams(),
+      );
+
+      final vectors = await backend.embedBatch(1, const <String>[
+        'hello',
+        'world!',
+      ]);
+      expect(vectors, <List<double>>[
+        <double>[5.0, 1.0],
+        <double>[6.0, 1.0],
+      ]);
+    });
+
+    test(
+      'falls back to sequential embed when batch API is unavailable',
+      () async {
+        await backend.modelLoadFromUrl(
+          'https://example.com/model.gguf',
+          const ModelParams(),
+        );
+
+        bridge.delete('embedBatch'.toJS);
+        final vectors = await backend.embedBatch(1, const <String>[
+          'hello',
+          'dart',
+        ], normalize: false);
+
+        expect(vectors, <List<double>>[
+          <double>[5.0, 0.0],
+          <double>[4.0, 0.0],
+        ]);
+      },
+    );
+
+    test('throws clear error when embedding API is unavailable', () async {
+      await backend.modelLoadFromUrl(
+        'https://example.com/model.gguf',
+        const ModelParams(),
+      );
+
+      bridge.delete('embed'.toJS);
+      await expectLater(
+        () => backend.embed(1, 'hello'),
+        throwsA(
+          isA<UnsupportedError>().having(
+            (UnsupportedError error) => error.message,
+            'message',
+            contains('v0.1.7'),
+          ),
+        ),
+      );
     });
 
     test(
