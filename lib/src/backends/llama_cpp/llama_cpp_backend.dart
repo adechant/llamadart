@@ -29,8 +29,12 @@ class NativeLlamaBackend
   LlamaLogLevel _currentLogLevel = LlamaLogLevel.warn;
 
   /// Creates a new [NativeLlamaBackend] and initializes its ports.
-  NativeLlamaBackend() {
+  NativeLlamaBackend({SendPort? initialSendPort}) {
     _responsesPort.listen(_handleResponse);
+    if (initialSendPort != null) {
+      _sendPort = initialSendPort;
+      _isReady = true;
+    }
   }
 
   @override
@@ -49,7 +53,11 @@ class NativeLlamaBackend
   }
 
   Future<void> _ensureIsolate() async {
-    if (_isolate != null && _sendPort != null) return;
+    if (_sendPort != null) {
+      _isReady = true;
+      return;
+    }
+
     final completer = Completer<void>();
     final tempPort = ReceivePort();
     tempPort.listen((msg) {
