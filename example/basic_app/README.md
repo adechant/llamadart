@@ -53,6 +53,10 @@ dart run -- -p "What is the capital of France?"
 
 Generate one or more embedding vectors from text input.
 
+By default, embedding CLIs use
+`ggml-org/embeddinggemma-300M-GGUF` (`embeddinggemma-300M-Q8_0.gguf`). Use
+`--model` to point to a different embedding GGUF.
+
 ```bash
 dart run bin/llamadart_embedding_example.dart -i "hello world" -i "rag"
 ```

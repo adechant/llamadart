@@ -52,6 +52,9 @@ dart run bin/llamadart_sqlite_vector_example.dart \
 
 The embedding CLI prints runtime backend, vector dimensions, and a short
 numeric preview per input.
+By default, embedding CLIs use
+`ggml-org/embeddinggemma-300M-GGUF` (`embeddinggemma-300M-Q8_0.gguf`); pass
+`--model` to use a different embedding GGUF.
 The SQLite vector CLI stores embeddings as BLOB vectors in SQLite and supports
 exact `vector_full_scan(...)` plus optional quantized `vector_quantize_scan(...)`.
 
