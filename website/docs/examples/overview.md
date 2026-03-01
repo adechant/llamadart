@@ -16,6 +16,7 @@ The repository ships multiple examples for different integration styles.
 
 - Learn API surface first: start with Basic App.
 - Learn local embedding flows quickly: use Basic App embedding CLI.
+- Learn local embedding + vector database retrieval: use Basic App SQLite vector CLI.
 - Build a product UI: start with Chat App.
 - Need terminal workflow parity: start with llama CLI.
 - Need HTTP integration for tools/agents: start with llamadart Server.

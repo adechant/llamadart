@@ -134,6 +134,8 @@ window.LlamaWebGpuBridge = class LlamaWebGpuBridge {
 - `createCompletion(prompt, { nPredict, temp, topK, topP, penalty, seed, grammar, onToken, parts, signal })`
 - `tokenize(text, addSpecial)`
 - `detokenize(tokens, special)`
+- `embed(text, { normalize })`
+- `embedBatch(texts, { normalize })`
 - `getModelMetadata()`
 - `getContextSize()`
 - `cancel()`
@@ -146,6 +148,7 @@ window.LlamaWebGpuBridge = class LlamaWebGpuBridge {
 
 - Web backend remains GGUF URL-based (`modelLoadFromUrl`).
 - If bridge activation fails, model loading fails (no alternate web backend).
+- Embeddings on web require bridge assets with embedding APIs (`v0.1.7+`).
 - During this experimental phase, bridge can be supplied by:
   - preloaded global `window.LlamaWebGpuBridge`, or
   - dynamic import URL via `WebGpuLlamaBackend(bridgeScriptUrl: ...)`.

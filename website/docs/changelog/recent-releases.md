@@ -19,6 +19,8 @@ For canonical full release notes, use:
   `tool/testing/native_embedding_sweep.dart`.
 - Added website docs for embeddings and updated basic-app docs with embedding
   examples.
+- Added a Basic App SQLite vector retrieval example using
+  `bin/llamadart_sqlite_vector_example.dart`.
 
 ## 0.6.4
 

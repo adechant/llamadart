@@ -9,40 +9,66 @@ const defaultModelUrl =
 
 void main(List<String> arguments) async {
   final parser = ArgParser()
-    ..addOption('model',
-        abbr: 'm',
-        help: 'Path or URL to the GGUF model file.',
-        defaultsTo: defaultModelUrl)
-    ..addMultiOption('lora',
-        abbr: 'l',
-        help: 'Path to LoRA adapter(s). Can be specified multiple times.')
+    ..addOption(
+      'model',
+      abbr: 'm',
+      help: 'Path or URL to the GGUF model file.',
+      defaultsTo: defaultModelUrl,
+    )
+    ..addMultiOption(
+      'lora',
+      abbr: 'l',
+      help: 'Path to LoRA adapter(s). Can be specified multiple times.',
+    )
     ..addOption('prompt', abbr: 'p', help: 'Prompt for single response mode.')
-    ..addFlag('interactive',
-        abbr: 'i',
-        help: 'Start in interactive conversation mode.',
-        defaultsTo: true)
-    ..addFlag('log',
-        abbr: 'g',
-        help: 'Enable native engine logging output.',
-        defaultsTo: false)
-    ..addOption('grammar',
-        abbr: 'G',
-        help: 'GBNF grammar string for structured output.\n'
-            'Example: "root ::= [0-9]+" (only numbers)\n'
-            'Example: "root ::= \\"yes\\" | \\"no\\"" (binary choice)')
-    ..addFlag('tool-test',
-        abbr: 't',
-        help: 'Enable a sample "get_weather" tool for testing tool calls.',
-        defaultsTo: false)
-    ..addOption('temp',
-        help: 'Generation temperature (default: 0.8)', defaultsTo: '0.8')
+    ..addFlag(
+      'interactive',
+      abbr: 'i',
+      help: 'Start in interactive conversation mode.',
+      defaultsTo: true,
+    )
+    ..addFlag(
+      'log',
+      abbr: 'g',
+      help: 'Enable native engine logging output.',
+      defaultsTo: false,
+    )
+    ..addOption(
+      'grammar',
+      abbr: 'G',
+      help:
+          'GBNF grammar string for structured output.\n'
+          'Example: "root ::= [0-9]+" (only numbers)\n'
+          'Example: "root ::= \\"yes\\" | \\"no\\"" (binary choice)',
+    )
+    ..addFlag(
+      'tool-test',
+      abbr: 't',
+      help: 'Enable a sample "get_weather" tool for testing tool calls.',
+      defaultsTo: false,
+    )
+    ..addOption(
+      'temp',
+      help: 'Generation temperature (default: 0.8)',
+      defaultsTo: '0.8',
+    )
     ..addOption('top-k', help: 'Top-k sampling (default: 40)', defaultsTo: '40')
-    ..addOption('top-p',
-        help: 'Top-p sampling (default: 0.95)', defaultsTo: '0.95')
-    ..addOption('penalty',
-        help: 'Repeat penalty (default: 1.1)', defaultsTo: '1.1')
-    ..addFlag('help',
-        abbr: 'h', help: 'Show this help message.', negatable: false);
+    ..addOption(
+      'top-p',
+      help: 'Top-p sampling (default: 0.95)',
+      defaultsTo: '0.95',
+    )
+    ..addOption(
+      'penalty',
+      help: 'Repeat penalty (default: 1.1)',
+      defaultsTo: '1.1',
+    )
+    ..addFlag(
+      'help',
+      abbr: 'h',
+      help: 'Show this help message.',
+      negatable: false,
+    );
 
   final results = parser.parse(arguments);
 
@@ -53,7 +79,8 @@ void main(List<String> arguments) async {
     print('  - Structured Numbers: -G \'root ::= [0-9]+\'');
     print('  - Binary Choice:      -G \'root ::= "yes" | "no"\'');
     print(
-        '  - List of colors:    -G \'root ::= ("red" | "green" | "blue") (", " ("red" | "green" | "blue"))*\'');
+      '  - List of colors:    -G \'root ::= ("red" | "green" | "blue") (", " ("red" | "green" | "blue"))*\'',
+    );
     return;
   }
 
@@ -115,7 +142,8 @@ void main(List<String> arguments) async {
 
     if (enableToolTest) {
       print(
-          '🛠️ Tool test enabled. The model will be forced to use the "get_weather" tool.');
+        '🛠️ Tool test enabled. The model will be forced to use the "get_weather" tool.',
+      );
     }
 
     if (grammar != null) {

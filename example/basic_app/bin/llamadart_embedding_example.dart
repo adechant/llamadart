@@ -61,12 +61,7 @@ Future<void> main(List<String> arguments) async {
       help: 'Max parallel sequence slots (0 uses input count).',
       defaultsTo: '0',
     )
-    ..addFlag(
-      'help',
-      abbr: 'h',
-      help: 'Show help message.',
-      negatable: false,
-    );
+    ..addFlag('help', abbr: 'h', help: 'Show help message.', negatable: false);
 
   final results = parser.parse(arguments);
   if (results['help'] as bool) {
@@ -101,8 +96,9 @@ Future<void> main(List<String> arguments) async {
   final texts = inputs.isEmpty
       ? const <String>['hello world', 'semantic search in dart']
       : List<String>.from(inputs);
-  final maxParallelSequences =
-      requestedMaxSeq > 0 ? requestedMaxSeq : texts.length;
+  final maxParallelSequences = requestedMaxSeq > 0
+      ? requestedMaxSeq
+      : texts.length;
 
   final modelService = ModelService();
   final engine = LlamaEngine(LlamaBackend());
