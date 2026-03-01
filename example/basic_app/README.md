@@ -13,6 +13,7 @@ A clean, organized CLI application demonstrating the capabilities of the `llamad
 - **Tool Calling Test Mode**: Enable `--tool-test` to exercise function-calling flow.
 - **Sampling Controls**: Tune `--temp`, `--top-k`, `--top-p`, and `--penalty`.
 - **Embedding Demo**: Includes a dedicated embedding CLI example.
+- **SQLite Vector Demo**: Stores embeddings in SQLite and runs nearest-neighbor search with `sqlite_vector`.
 
 ## Usage
 
@@ -56,6 +57,16 @@ Generate one or more embedding vectors from text input.
 dart run bin/llamadart_embedding_example.dart -i "hello world" -i "rag"
 ```
 
+For quick retrieval-style experiments, pass a query first and candidate strings
+after it:
+
+```bash
+dart run bin/llamadart_embedding_example.dart \
+  -i "how do I improve embedding throughput?" \
+  -i "Increase maxParallelSequences for wider embedding batches." \
+  -i "Tune batchSize and ubatchSize together."
+```
+
 For closer `llama.cpp` parity, force CPU and align runtime knobs:
 
 ```bash
@@ -64,6 +75,9 @@ dart run bin/llamadart_embedding_example.dart \
   --batch-size 2048 --ubatch-size 2048 --max-seq 2 \
   -i "hello world" -i "semantic search"
 ```
+
+The embedding CLI prints runtime backend, dimensions, and a value preview for
+each input vector.
 
 Embedding CLI flags (`bin/llamadart_embedding_example.dart`):
 
@@ -77,6 +91,66 @@ Embedding CLI flags (`bin/llamadart_embedding_example.dart`):
 - `--batch-size`: `n_batch` override.
 - `--ubatch-size`: `n_ubatch` override.
 - `--max-seq`: `n_seq_max` override for parallel embedding slots.
+
+### 6. SQLite Vector Search Example
+
+Run a complete local retrieval flow: generate embeddings with `llamadart`,
+store them in SQLite as vectors, and query nearest matches with
+`sqlite_vector`.
+
+```bash
+dart run bin/llamadart_sqlite_vector_example.dart \
+  -q "How do I improve embedding throughput?" \
+  -d "Increase maxParallelSequences for wider embedding batches." \
+  -d "Tune batchSize and ubatchSize together." \
+  -d "Use benchmark sweeps to compare sequential and batch throughput."
+```
+
+SQLite vector CLI highlights (`bin/llamadart_sqlite_vector_example.dart`):
+
+- Auto-loads SQLite vector extension (`sqlite_vector`).
+- Creates a `documents` table with an `embedding` BLOB column.
+- Initializes vector search with `vector_init(...)`.
+- Supports exact `vector_full_scan(...)` and optional quantized ANN mode via
+  `--quantized` (`vector_quantize_scan(...)`).
+- Prints both raw distance and translated similarity/relevance labels.
+- Supports `--db <path>` to persist the database instead of using memory.
+
+Quantized mode example:
+
+```bash
+dart run bin/llamadart_sqlite_vector_example.dart \
+  --quantized --top-k 5 \
+  -q "How do I improve embedding throughput?" \
+  -d "Increase maxParallelSequences for wider embedding batches." \
+  -d "Tune batchSize and ubatchSize together."
+```
+
+Quantized quality-check example (compare ANN vs exact recall):
+
+```bash
+dart run bin/llamadart_sqlite_vector_example.dart \
+  --quantized --compare-exact --quantized-qtype INT8 \
+  --quantized-max-memory 64MB --top-k 5 --min-similarity 0.45 \
+  -q "How do I improve embedding throughput?" \
+  -d "Increase maxParallelSequences for wider embedding batches." \
+  -d "Tune batchSize and ubatchSize together."
+```
+
+How to translate result values:
+
+- Lower `distance` is always better.
+- With default `--normalize` (COSINE metric), similarity is approximately
+  `1 - distance` (clamped to `[-1, 1]`).
+- Without normalization (`L2` metric), similarity is shown as
+  `1 / (1 + distance)` for quick intuition.
+- `relevance` buckets (`very-high`, `high`, `medium`, `low`, `very-low`) are
+  convenience labels derived from similarity.
+- `--min-similarity` filters low-confidence rows from printed output.
+- `--compare-exact` prints `recall@k` and distance deltas for quantized vs exact
+  search quality.
+- `--quantized-qtype` (`UINT8`, `INT8`, `1BIT`) and
+  `--quantized-max-memory` tune quantization behavior.
 
 ## Options
 
@@ -105,6 +179,7 @@ dart test
 
 - **`bin/llamadart_basic_example.dart`**: The CLI entry point and user interface logic.
 - **`bin/llamadart_embedding_example.dart`**: Embedding-only CLI entry point.
+- **`bin/llamadart_sqlite_vector_example.dart`**: SQLite vector retrieval CLI example.
 - **`lib/services/llama_service.dart`**: High-level wrapper for the `llamadart` engine.
 - **`lib/services/model_service.dart`**: Handles model downloading and path verification.
 - **`lib/models.dart`**: Data structures for the application.

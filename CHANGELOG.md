@@ -9,6 +9,7 @@
   * Added embedding-focused tests for engine behavior and worker message contracts.
 * **Examples/docs**:
   * Added `example/basic_app/bin/llamadart_embedding_example.dart`.
+  * Added `example/basic_app/bin/llamadart_sqlite_vector_example.dart` for local embedding retrieval with SQLite vector search.
   * Updated example docs and top-level README with embedding usage snippets.
   * Added `tool/testing/native_embedding_benchmark.dart` to compare sequential embedding calls vs `embedBatch(...)` throughput (with optional `--json-out`).
   * Added `tool/testing/native_embedding_sweep.dart` to run max-seq sweeps and dump CSV speedup reports for plotting.

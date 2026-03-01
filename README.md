@@ -23,6 +23,8 @@
   - Apple: Metal
   - Android/Linux/Windows: Vulkan by default, with optional target-specific modules
   - Web: WebGPU via bridge runtime (with CPU fallback)
+- 🧭 **Embeddings API**: Generate vectors with `embed(...)` and
+  `embedBatch(...)`.
 - 🖼️ **Multimodal Support**: Vision/audio model runtime support.
 - **LoRA Support**: Runtime GGUF adapter application.
 - 🔇 **Split Logging Control**: Dart logs and native logs can be configured independently.
@@ -107,6 +109,10 @@ Future<void> main() async {
 ```
 
 Note: embedding support depends on backend/runtime capabilities.
+
+- Native runtime supports single and batched embeddings.
+- Web runtime requires bridge assets with embedding APIs (`v0.1.7` or newer).
+- See the full guide: https://llamadart.leehack.com/docs/guides/embeddings
 
 ---
 
@@ -236,6 +242,7 @@ The default web backend uses `WebGpuLlamaBackend` as a router for WebGPU and CPU
   - [`leehack/llama-web-bridge`](https://github.com/leehack/llama-web-bridge)
   - [`leehack/llama-web-bridge-assets`](https://github.com/leehack/llama-web-bridge-assets)
 - `example/chat_app` prefers local bridge assets, then falls back to jsDelivr.
+- Web embeddings require bridge assets with embedding APIs (`v0.1.7` or newer).
 - Browser Cache Storage is used for repeated model loads when `useCache` is enabled (default).
 - `loadMultimodalProjector` is supported on web for URL-based model/mmproj assets.
 - `supportsVision` and `supportsAudio` reflect loaded projector capabilities.

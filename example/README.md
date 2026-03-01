@@ -23,6 +23,12 @@ dart run
 
 # Embedding demo
 dart run bin/llamadart_embedding_example.dart -i "hello world"
+
+# SQLite vector retrieval demo
+dart run bin/llamadart_sqlite_vector_example.dart \
+  -q "How do I improve embedding throughput?" \
+  -d "Increase maxParallelSequences for wider embedding batches." \
+  -d "Tune batchSize and ubatchSize together."
 ```
 
 ### 2. Chat App (`chat_app/`)
