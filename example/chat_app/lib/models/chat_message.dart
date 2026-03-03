@@ -1,5 +1,7 @@
 import 'package:llamadart/llamadart.dart';
 
+import '../utils/text_sanitizer.dart';
+
 class ChatMessage {
   final String text;
   final bool isUser;
@@ -11,7 +13,7 @@ class ChatMessage {
   int? tokenCount; // Cache token count for sliding window optimization
 
   ChatMessage({
-    required this.text,
+    required String text,
     required this.isUser,
     this.isInfo = false,
     this.parts,
@@ -19,7 +21,8 @@ class ChatMessage {
     this.role,
     DateTime? timestamp,
     this.tokenCount,
-  }) : timestamp = timestamp ?? DateTime.now();
+  }) : text = sanitizeForTextLayout(text),
+       timestamp = timestamp ?? DateTime.now();
 
   /// Derived property to check if this message is a tool call.
   bool get isToolCall {
@@ -38,7 +41,11 @@ class ChatMessage {
   /// Derived property to get thinking content if present.
   String? get thinkingText {
     final thinkingPart = parts?.whereType<LlamaThinkingContent>().firstOrNull;
-    return thinkingPart?.thinking;
+    final thinking = thinkingPart?.thinking;
+    if (thinking == null) {
+      return null;
+    }
+    return sanitizeForTextLayout(thinking);
   }
 
   ChatMessage copyWith({

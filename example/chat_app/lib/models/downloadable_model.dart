@@ -87,21 +87,26 @@ class DownloadableModel {
       ),
     ),
     DownloadableModel(
-      name: 'Qwen2.5 0.5B Instruct',
+      name: 'Qwen3.5 0.8B Instruct',
       description:
-          '⚡ Ultra-light (491MB) • Fast and reliable web/mobile starter.',
+          '🆕 Qwen3.5 mini VLM (720MB bundle) • Fast tools, vision, and thinking.',
       url:
-          'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf?download=true',
-      filename: 'qwen2.5-0.5b-instruct-q4_k_m.gguf',
-      sizeBytes: 491400032,
-      minRamGb: 2,
+          'https://huggingface.co/bartowski/Qwen_Qwen3.5-0.8B-GGUF/resolve/main/Qwen_Qwen3.5-0.8B-Q4_K_M.gguf?download=true',
+      filename: 'Qwen_Qwen3.5-0.8B-Q4_K_M.gguf',
+      mmprojUrl:
+          'https://huggingface.co/bartowski/Qwen_Qwen3.5-0.8B-GGUF/resolve/main/mmproj-Qwen_Qwen3.5-0.8B-f16.gguf?download=true',
+      mmprojFilename: 'mmproj-Qwen_Qwen3.5-0.8B-f16.gguf',
+      sizeBytes: 754903104,
+      minRamGb: 3,
+      supportsVision: true,
       supportsToolCalling: true,
+      supportsThinking: true,
       preset: ModelPreset(
-        temperature: 0.1,
-        topK: 40,
-        topP: 0.9,
-        contextSize: 4096,
-        maxTokens: 2048,
+        temperature: 0.6,
+        topK: 20,
+        topP: 0.95,
+        contextSize: 8192,
+        maxTokens: 1024,
       ),
     ),
     DownloadableModel(
@@ -155,21 +160,49 @@ class DownloadableModel {
       ),
     ),
     DownloadableModel(
-      name: 'Qwen2.5 1.5B Instruct',
+      name: 'Qwen3.5 2B Instruct',
       description:
-          '💬 Popular compact assistant (1.12GB) • Strong quality/size ratio.',
+          '🆕 Qwen3.5 compact VLM (1.85GB bundle) • Better quality with tools, vision, and thinking.',
       url:
-          'https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf?download=true',
-      filename: 'qwen2.5-1.5b-instruct-q4_k_m.gguf',
-      sizeBytes: 1117320736,
-      minRamGb: 3,
+          'https://huggingface.co/bartowski/Qwen_Qwen3.5-2B-GGUF/resolve/main/Qwen_Qwen3.5-2B-Q4_K_M.gguf?download=true',
+      filename: 'Qwen_Qwen3.5-2B-Q4_K_M.gguf',
+      mmprojUrl:
+          'https://huggingface.co/bartowski/Qwen_Qwen3.5-2B-GGUF/resolve/main/mmproj-Qwen_Qwen3.5-2B-f16.gguf?download=true',
+      mmprojFilename: 'mmproj-Qwen_Qwen3.5-2B-f16.gguf',
+      sizeBytes: 1983861664,
+      minRamGb: 5,
+      supportsVision: true,
       supportsToolCalling: true,
+      supportsThinking: true,
       preset: ModelPreset(
-        temperature: 0.1,
-        topK: 40,
-        topP: 0.9,
+        temperature: 0.6,
+        topK: 20,
+        topP: 0.95,
         contextSize: 8192,
-        maxTokens: 2048,
+        maxTokens: 1024,
+      ),
+    ),
+    DownloadableModel(
+      name: 'Qwen3.5 4B Instruct',
+      description:
+          '🆕 Qwen3.5 4B VLM (3.29GB bundle) • Strong multimodal reasoner with tool use.',
+      url:
+          'https://huggingface.co/bartowski/Qwen_Qwen3.5-4B-GGUF/resolve/main/Qwen_Qwen3.5-4B-Q4_K_M.gguf?download=true',
+      filename: 'Qwen_Qwen3.5-4B-Q4_K_M.gguf',
+      mmprojUrl:
+          'https://huggingface.co/bartowski/Qwen_Qwen3.5-4B-GGUF/resolve/main/mmproj-Qwen_Qwen3.5-4B-f16.gguf?download=true',
+      mmprojFilename: 'mmproj-Qwen_Qwen3.5-4B-f16.gguf',
+      sizeBytes: 3529359968,
+      minRamGb: 8,
+      supportsVision: true,
+      supportsToolCalling: true,
+      supportsThinking: true,
+      preset: ModelPreset(
+        temperature: 0.6,
+        topK: 20,
+        topP: 0.95,
+        contextSize: 8192,
+        maxTokens: 1024,
       ),
     ),
     DownloadableModel(
@@ -272,25 +305,6 @@ class DownloadableModel {
       ),
     ),
     DownloadableModel(
-      name: 'Qwen3 4B',
-      description:
-          '🧠 Thinking + tools (2.50GB) • Best all-around reasoning upgrade.',
-      url:
-          'https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf?download=true',
-      filename: 'Qwen3-4B-Q4_K_M.gguf',
-      sizeBytes: 2497280256,
-      minRamGb: 6,
-      supportsToolCalling: true,
-      supportsThinking: true,
-      preset: ModelPreset(
-        temperature: 0.6,
-        topK: 20,
-        topP: 0.95,
-        contextSize: 8192,
-        maxTokens: 4096,
-      ),
-    ),
-    DownloadableModel(
       name: 'Meta-Llama 3.1 8B Instruct',
       description:
           '🚀 Flagship quality (4.92GB) • Popular large model benchmark.',
@@ -306,6 +320,29 @@ class DownloadableModel {
         topP: 0.9,
         contextSize: 8192,
         maxTokens: 2048,
+      ),
+    ),
+    DownloadableModel(
+      name: 'Qwen3.5 9B Instruct',
+      description:
+          '🆕 Qwen3.5 9B VLM (6.32GB bundle) • Highest-quality Qwen option with thinking + tools.',
+      url:
+          'https://huggingface.co/bartowski/Qwen_Qwen3.5-9B-GGUF/resolve/main/Qwen_Qwen3.5-9B-Q4_K_M.gguf?download=true',
+      filename: 'Qwen_Qwen3.5-9B-Q4_K_M.gguf',
+      mmprojUrl:
+          'https://huggingface.co/bartowski/Qwen_Qwen3.5-9B-GGUF/resolve/main/mmproj-Qwen_Qwen3.5-9B-f16.gguf?download=true',
+      mmprojFilename: 'mmproj-Qwen_Qwen3.5-9B-f16.gguf',
+      sizeBytes: 6784286240,
+      minRamGb: 12,
+      supportsVision: true,
+      supportsToolCalling: true,
+      supportsThinking: true,
+      preset: ModelPreset(
+        temperature: 0.6,
+        topK: 20,
+        topP: 0.95,
+        contextSize: 8192,
+        maxTokens: 1024,
       ),
     ),
   ];
