@@ -6,6 +6,7 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:llamadart/llamadart.dart';
 
 import '../models/chat_message.dart';
+import '../utils/text_sanitizer.dart';
 import 'tool_execution_card.dart';
 
 class MessageBubble extends StatelessWidget {
@@ -40,9 +41,10 @@ class MessageBubble extends StatelessWidget {
     }
 
     final isUser = message.isUser;
+    final messageText = sanitizeForTextLayout(message.text);
     final isTypingPlaceholder =
         !isUser &&
-        message.text.trim() == '...' &&
+        messageText.trim() == '...' &&
         (message.parts == null || message.parts!.isEmpty);
     final align = isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start;
     final colorScheme = Theme.of(context).colorScheme;
@@ -63,7 +65,10 @@ class MessageBubble extends StatelessWidget {
       bottomRight: Radius.circular(isUser ? 8 : borderRadius),
     );
 
-    final thinkingText = message.thinkingText;
+    final thinkingTextRaw = message.thinkingText;
+    final thinkingText = thinkingTextRaw == null
+        ? null
+        : sanitizeForTextLayout(thinkingTextRaw);
 
     return Padding(
       padding: EdgeInsets.only(bottom: isNextSame ? 8 : 18),
@@ -92,18 +97,18 @@ class MessageBubble extends StatelessWidget {
                 _buildToolCallView(context)
               else if (isTypingPlaceholder)
                 _buildTypingBubble(context)
-              else if (message.text.isNotEmpty)
+              else if (messageText.isNotEmpty)
                 isStreaming && !isUser
                     ? _buildStreamingTextBubble(
                         context,
-                        message.text,
+                        messageText,
                         bubbleColor: bubbleColor,
                         textColor: textColor,
                         border: border,
                       )
                     : _buildResponseBubble(
                         context,
-                        message.text,
+                        messageText,
                         bubbleColor: bubbleColor,
                         textColor: textColor,
                         border: border,
@@ -144,6 +149,7 @@ class MessageBubble extends StatelessWidget {
 
   Widget _buildInfoMessage(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final text = sanitizeForTextLayout(message.text);
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -158,7 +164,7 @@ class MessageBubble extends StatelessWidget {
             ),
           ),
           child: Text(
-            message.text,
+            text,
             style: TextStyle(
               fontSize: 12,
               color: colorScheme.onSurfaceVariant,
@@ -233,6 +239,7 @@ class MessageBubble extends StatelessWidget {
     required bool isUser,
   }) {
     final colorScheme = Theme.of(context).colorScheme;
+    final safeText = sanitizeForTextLayout(text);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
@@ -253,7 +260,7 @@ class MessageBubble extends StatelessWidget {
         ],
       ),
       child: SelectableText(
-        text,
+        safeText,
         style: TextStyle(
           color: textColor.withValues(alpha: isUser ? 0.98 : 0.95),
           fontSize: 16,
@@ -272,6 +279,7 @@ class MessageBubble extends StatelessWidget {
     required bool isUser,
   }) {
     final colorScheme = Theme.of(context).colorScheme;
+    final safeText = sanitizeForTextLayout(text);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
@@ -292,7 +300,7 @@ class MessageBubble extends StatelessWidget {
         ],
       ),
       child: MarkdownBody(
-        data: text,
+        data: safeText,
         selectable: true,
         styleSheet: MarkdownStyleSheet(
           p: TextStyle(
@@ -355,6 +363,7 @@ class MessageBubble extends StatelessWidget {
     required BorderRadius border,
   }) {
     final colorScheme = Theme.of(context).colorScheme;
+    final safeText = sanitizeForTextLayout(text);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
@@ -373,7 +382,7 @@ class MessageBubble extends StatelessWidget {
         ],
       ),
       child: Text(
-        text,
+        safeText,
         style: TextStyle(
           color: textColor.withValues(alpha: 0.95),
           fontSize: 16,
@@ -461,7 +470,7 @@ class MessageBubble extends StatelessWidget {
     if (toolCalls == null || toolCalls.isEmpty) {
       return _buildMarkdownBubble(
         context,
-        message.text,
+        sanitizeForTextLayout(message.text),
         bubbleColor: colorScheme.surfaceContainerHighest,
         textColor: colorScheme.onSurface,
         border: BorderRadius.circular(12),
@@ -476,6 +485,8 @@ class MessageBubble extends StatelessWidget {
   }
 
   Widget _buildThinkingView(BuildContext context, String thinkingText) {
+    final safeThinkingText = sanitizeForTextLayout(thinkingText);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       width: double.infinity,
@@ -531,7 +542,7 @@ class MessageBubble extends StatelessWidget {
               ),
             ),
             child: Text(
-              thinkingText,
+              safeThinkingText,
               style: TextStyle(
                 fontFamily: 'monospace',
                 fontSize: 12,

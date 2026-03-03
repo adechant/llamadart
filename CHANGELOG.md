@@ -17,6 +17,11 @@
   * Added WebGPU bridge embedding APIs and wired web backend support for `LlamaEngine.embed(...)` / `embedBatch(...)`.
   * Updated default web bridge asset pinning to `leehack/llama-web-bridge-assets@v0.1.7` (built against llama.cpp `b8157`).
   * Validated the `v0.1.7` bridge bundle through local fetch-script checksum verification.
+* **Chat app model catalog + stability**:
+  * Updated `example/chat_app` recommended Qwen presets to the Qwen3.5 lineup (`0.8B`, `2B`, `4B`, `9B`) and removed older Qwen2.5/Qwen3 defaults from the in-app library.
+  * Added multimodal projector (`mmproj`) wiring for Qwen3.5 model cards and tuned safer multimodal defaults (`contextSize: 8192`, `maxTokens: 1024`).
+  * Fixed Flutter text paint crashes caused by malformed UTF-16 streaming boundaries by aligning incremental reveal to surrogate-pair boundaries and sanitizing text/tool payload rendering paths.
+  * Added sanitizer unit coverage and refreshed chat-app README architecture/troubleshooting sections for multimodal and UTF-16 guidance.
 
 ## 0.6.4
 

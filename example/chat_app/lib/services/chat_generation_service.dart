@@ -246,11 +246,40 @@ class ChatGenerationService {
 
     final backlog = targetText.length - currentText.length;
     final revealStep = _revealStepForBacklog(backlog);
-    final nextLength = currentText.length + revealStep;
+    var nextLength = currentText.length + revealStep;
     if (nextLength >= targetText.length) {
       return targetText;
     }
+
+    nextLength = _alignToUtf16Boundary(targetText, nextLength);
+    if (nextLength >= targetText.length) {
+      return targetText;
+    }
+
     return targetText.substring(0, nextLength);
+  }
+
+  int _alignToUtf16Boundary(String text, int end) {
+    if (end <= 0 || end >= text.length) {
+      return end;
+    }
+
+    final previousCodeUnit = text.codeUnitAt(end - 1);
+    final nextCodeUnit = text.codeUnitAt(end);
+    if (_isLeadingSurrogate(previousCodeUnit) &&
+        _isTrailingSurrogate(nextCodeUnit)) {
+      return end + 1;
+    }
+
+    return end;
+  }
+
+  bool _isLeadingSurrogate(int codeUnit) {
+    return codeUnit >= 0xD800 && codeUnit <= 0xDBFF;
+  }
+
+  bool _isTrailingSurrogate(int codeUnit) {
+    return codeUnit >= 0xDC00 && codeUnit <= 0xDFFF;
   }
 
   int _revealStepForBacklog(int backlog) {

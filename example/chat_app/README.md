@@ -34,8 +34,8 @@ flutter test
 Note: this is a Flutter app, so use `flutter test` (not `dart test`).
 
 ### 2. Choose and Download a Model
-1. The app will open to a **Model Selection** screen.
-2. Select one of the pre-configured models (for example: FunctionGemma 270M, Llama 3.2 3B, Qwen 3 4B, Gemma 3/3n, DeepSeek R1 distills).
+1. The app will open to a **Manage Models** screen.
+2. Select one of the pre-configured models (for example: FunctionGemma 270M, Qwen3.5 0.8B/2B/4B/9B, Llama 3.2 3B, Gemma 3/3n, DeepSeek R1 distills).
 3. Tap the **Download** icon. The app uses `Dio` to download the model directly to your device's documents directory.
 4. Once downloaded, tap **Select** to load the model.
 
@@ -79,34 +79,42 @@ The app follows a clean, layered architecture with strict separation of concerns
 
 ```
 lib/
-├── main.dart              # App entry point
+├── main.dart                      # App entry point
 ├── screens/
-│   ├── chat_screen.dart            # Main chat screen
-│   └── model_selection_screen.dart  # Model management UI
+│   ├── app_shell_screen.dart       # Responsive shell/navigation host
+│   ├── chat_screen.dart            # Main chat UI
+│   └── manage_models_screen.dart   # Model library + inference controls
 ├── widgets/
-│   ├── chat_input.dart             # Message input area
-│   ├── message_bubble.dart         # Styled chat bubbles
-│   ├── settings_sheet.dart         # Advanced config UI
+│   ├── chat_input.dart             # Message input + media staging
+│   ├── message_bubble.dart         # Message rendering (markdown/thinking/tool)
+│   ├── model_card.dart             # Model picker cards
+│   ├── tool_declarations_dialog.dart
+│   ├── tool_execution_card.dart
 │   └── ...                         # Other modular UI components
 ├── providers/
 │   └── chat_provider.dart          # App state & orchestration
 ├── services/
-│   ├── chat_service.dart           # Business logic & prompt building
-│   ├── model_service.dart          # File system & download logic
+│   ├── chat_service.dart           # Engine orchestration + prompt cleanup
+│   ├── chat_generation_service.dart
+│   ├── assistant_output_service.dart
+│   ├── model_service_base.dart
+│   ├── model_service_io.dart       # Native download/delete/resume
+│   ├── model_service_web.dart      # Browser cache prefetch/eviction
 │   └── settings_service.dart       # Local persistence (SharedPreferences)
 ├── models/
 │   ├── chat_message.dart           # Message data with token caching
 │   ├── chat_settings.dart          # Configuration data
 │   └── downloadable_model.dart     # Model metadata
-└── stub/
-    └── io_stub.dart                # Web compatibility stubs
+└── utils/
+    ├── backend_utils.dart
+    └── text_sanitizer.dart
 ```
 
 ### Key Components
 
 - **`ChatProvider`**: Orchestrates state and reacts to user input.
 - **`ChatService`**: Handles prompt construction, token counting, and engine interaction.
-- **`ModelService`**: Manages the local model library and background downloads.
+- **`ModelService`**: Manages the model library with native/web-specific download backends.
 - **`SettingsService`**: Handles persistent storage of user preferences.
 - **`ChatMessage`**: Implements **Token Caching** to optimize performance during long conversations.
 
@@ -182,6 +190,16 @@ _(Add screenshots here when complete)_
 - Ensure hardware acceleration is enabled (e.g., Metal on Apple, Vulkan on Android/Linux/Windows).
 - Check if `GPU Layers` is set to a high enough value (default 99 offloads all layers).
 - Use a model with a smaller quantization level (e.g., Q4_K_M).
+
+**Multimodal instability or decode crashes (Qwen3.5 VLMs):**
+- Keep Qwen3.5 model defaults unless you are tuning carefully (`Context Size` 8192, `Max Tokens` 1024).
+- Start a fresh conversation before large image prompts to avoid context-slot pressure.
+- If crashes persist on lower-memory devices, switch to the 0.8B/2B variants or disable multimodal for that run.
+
+**`Invalid argument(s): string is not well-formed UTF-16` in Flutter painting:**
+- This indicates malformed streamed text (broken surrogate pair) reached text rendering.
+- Upgrade to the latest chat app code (stream-boundary + text-sanitization fixes are included).
+- Restart the app fully after upgrade (`flutter clean` + `flutter run`) to ensure stale binaries are not reused.
 
 **Slow model downloads on iOS/Android:**
 - Run on a release/profile build (`flutter run --release`) for realistic transfer performance.

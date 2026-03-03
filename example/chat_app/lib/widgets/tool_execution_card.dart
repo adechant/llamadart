@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:llamadart/llamadart.dart';
 
+import '../utils/text_sanitizer.dart';
+
 class ToolExecutionCard extends StatelessWidget {
   final List<LlamaToolCallContent> toolCalls;
   final List<LlamaToolResultContent> toolResults;
@@ -16,9 +18,9 @@ class ToolExecutionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final heading = toolCalls.length == 1
-        ? 'Tool call'
-        : 'Tool calls (${toolCalls.length})';
+    final heading = sanitizeForTextLayout(
+      toolCalls.length == 1 ? 'Tool call' : 'Tool calls (${toolCalls.length})',
+    );
 
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 640),
@@ -193,13 +195,15 @@ class _ToolCallItem extends StatelessWidget {
     }
 
     if (value is String) {
-      return value;
+      return sanitizeForTextLayout(value);
     }
 
     try {
-      return const JsonEncoder.withIndent('  ').convert(value);
+      return sanitizeForTextLayout(
+        const JsonEncoder.withIndent('  ').convert(value),
+      );
     } catch (_) {
-      return value.toString();
+      return sanitizeForTextLayout(value.toString());
     }
   }
 }
@@ -218,6 +222,8 @@ class _ToolBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final safeLabel = sanitizeForTextLayout(label);
+    final safeValue = sanitizeForTextLayout(value);
 
     return Container(
       width: double.infinity,
@@ -230,7 +236,7 @@ class _ToolBlock extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            label,
+            safeLabel,
             style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.bold,
@@ -239,7 +245,7 @@ class _ToolBlock extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           SelectableText(
-            value,
+            safeValue,
             maxLines: 8,
             minLines: 1,
             style: TextStyle(
