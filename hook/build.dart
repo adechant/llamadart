@@ -9,8 +9,8 @@ import 'package:path/path.dart' as path;
 
 import 'package:llamadart/src/hook/native_bundle_config.dart';
 
-const _llamaCppTag = 'b8157';
-const _nativeRepoSlug = 'leehack/llamadart-native';
+const _llamaCppTag = 'b8210';
+const _nativeRepoSlug = 'ggerganov/llama.cpp';
 const _baseUrl =
     'https://github.com/$_nativeRepoSlug/releases/download/$_llamaCppTag';
 
