@@ -30,5 +30,24 @@ dev_dependencies:
   lints: ^6.1.0
   test: ^1.26.3
 
+analyzer:
+  exclude:
+    - 'lib/src/llama_cpp.dart'
+
+ffigen: # dart run ffigen
+  name: 'llama_cpp'
+  description: 'llama.cpp binding'
+  output: 'lib/src/backends/generated/llama_cpp.dart'
+  # ignore-source-errors: true
+  headers:
+    entry-points:
+      - 'include/llama.h'
+      - 'include/mtmd.h'
+      - 'include/ggml-backend.h'
+      - 'include/log.h'
+      - 'include/mtmd-helper.h'
+      
+  compiler-opts:
+    - '-I/usr/lib/clang/17/include'
 
 # No plugin section needed for Pure Native Asset FFI package

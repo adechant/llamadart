@@ -5,155 +5,42 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:ffi/ffi.dart';
-import 'package:path/path.dart' as path;
 
 import '../../core/models/chat/content_part.dart';
 import '../../core/models/config/gpu_backend.dart';
 import '../../core/models/config/log_level.dart';
 import '../../core/models/inference/generation_params.dart';
 import '../../core/models/inference/model_params.dart';
-import 'bindings.dart';
-
-typedef _GgmlBackendLoadNative = ggml_backend_reg_t Function(Pointer<Char>);
-typedef _GgmlBackendLoadDart = ggml_backend_reg_t Function(Pointer<Char>);
-typedef _GgmlBackendInitNative = ggml_backend_reg_t Function();
-typedef _GgmlBackendInitDart = ggml_backend_reg_t Function();
-typedef _GgmlBackendLoadAllNative = Void Function();
-typedef _GgmlBackendLoadAllDart = void Function();
-typedef _GgmlBackendLoadAllFromPathNative = Void Function(Pointer<Char>);
-typedef _GgmlBackendLoadAllFromPathDart = void Function(Pointer<Char>);
-typedef _GgmlBackendRegisterNative = Void Function(ggml_backend_reg_t);
-typedef _GgmlBackendRegisterDart = void Function(ggml_backend_reg_t);
-typedef _LlamaDartSetLogLevelNative = Void Function(Int32);
-typedef _LlamaDartSetLogLevelDart = void Function(int);
-typedef _MtmdDefaultMarkerNative = Pointer<Char> Function();
-typedef _MtmdDefaultMarkerDart = Pointer<Char> Function();
-typedef _MtmdContextParamsDefaultNative = mtmd_context_params Function();
-typedef _MtmdContextParamsDefaultDart = mtmd_context_params Function();
-typedef _MtmdInitFromFileNative =
-    Pointer<mtmd_context> Function(
-      Pointer<Char>,
-      Pointer<llama_model>,
-      mtmd_context_params,
-    );
-typedef _MtmdInitFromFileDart =
-    Pointer<mtmd_context> Function(
-      Pointer<Char>,
-      Pointer<llama_model>,
-      mtmd_context_params,
-    );
-typedef _MtmdFreeNative = Void Function(Pointer<mtmd_context>);
-typedef _MtmdFreeDart = void Function(Pointer<mtmd_context>);
-typedef _MtmdInputChunksInitNative = Pointer<mtmd_input_chunks> Function();
-typedef _MtmdInputChunksInitDart = Pointer<mtmd_input_chunks> Function();
-typedef _MtmdInputChunksFreeNative = Void Function(Pointer<mtmd_input_chunks>);
-typedef _MtmdInputChunksFreeDart = void Function(Pointer<mtmd_input_chunks>);
-typedef _MtmdHelperBitmapInitFromFileNative =
-    Pointer<mtmd_bitmap> Function(Pointer<mtmd_context>, Pointer<Char>);
-typedef _MtmdHelperBitmapInitFromFileDart =
-    Pointer<mtmd_bitmap> Function(Pointer<mtmd_context>, Pointer<Char>);
-typedef _MtmdHelperBitmapInitFromBufNative =
-    Pointer<mtmd_bitmap> Function(
-      Pointer<mtmd_context>,
-      Pointer<UnsignedChar>,
-      Size,
-    );
-typedef _MtmdHelperBitmapInitFromBufDart =
-    Pointer<mtmd_bitmap> Function(
-      Pointer<mtmd_context>,
-      Pointer<UnsignedChar>,
-      int,
-    );
-typedef _MtmdBitmapInitFromAudioNative =
-    Pointer<mtmd_bitmap> Function(Size, Pointer<Float>);
-typedef _MtmdBitmapInitFromAudioDart =
-    Pointer<mtmd_bitmap> Function(int, Pointer<Float>);
-typedef _MtmdBitmapFreeNative = Void Function(Pointer<mtmd_bitmap>);
-typedef _MtmdBitmapFreeDart = void Function(Pointer<mtmd_bitmap>);
-typedef _MtmdTokenizeNative =
-    Int32 Function(
-      Pointer<mtmd_context>,
-      Pointer<mtmd_input_chunks>,
-      Pointer<mtmd_input_text>,
-      Pointer<Pointer<mtmd_bitmap>>,
-      Size,
-    );
-typedef _MtmdTokenizeDart =
-    int Function(
-      Pointer<mtmd_context>,
-      Pointer<mtmd_input_chunks>,
-      Pointer<mtmd_input_text>,
-      Pointer<Pointer<mtmd_bitmap>>,
-      int,
-    );
-typedef _MtmdHelperEvalChunksNative =
-    Int32 Function(
-      Pointer<mtmd_context>,
-      Pointer<llama_context>,
-      Pointer<mtmd_input_chunks>,
-      llama_pos,
-      llama_seq_id,
-      Int32,
-      Bool,
-      Pointer<llama_pos>,
-    );
-typedef _MtmdHelperEvalChunksDart =
-    int Function(
-      Pointer<mtmd_context>,
-      Pointer<llama_context>,
-      Pointer<mtmd_input_chunks>,
-      int,
-      int,
-      int,
-      bool,
-      Pointer<llama_pos>,
-    );
-typedef _MtmdLogSetNative = Void Function(ggml_log_callback, Pointer<Void>);
-typedef _MtmdLogSetDart = void Function(ggml_log_callback, Pointer<Void>);
+import '../generated/llama_cpp.dart';
 
 /// Service responsible for managing Llama.cpp models and contexts.
 ///
 /// This service handles the direct interaction with the native Llama.cpp library,
 /// including loading models, creating contexts, managing memory, and running inference.
 class LlamaCppService {
-  static const Map<String, int> _androidCpuVariantPriority = <String, int>{
-    'android_armv9.2_2': 0,
-    'android_armv9.2_1': 1,
-    'android_armv9.0_1': 2,
-    'android_armv8.6_1': 3,
-    'android_armv8.2_2': 4,
-    'android_armv8.2_1': 5,
-    'android_armv8.0_1': 6,
-  };
+  static llama_cpp? _lib;
+  static llama_cpp get lib {
+    if (_lib == null) {
+      if (Platform.isAndroid) {
+        _lib = llama_cpp(DynamicLibrary.open("libllama.so"));
+      } else if (Platform.isLinux) {
+        _lib = llama_cpp(DynamicLibrary.open("libllama.so"));
+      } else if (Platform.isWindows) {
+        _lib = llama_cpp(DynamicLibrary.open("./llama.dll"));
+      } else if (Platform.isMacOS) {
+        _lib = llama_cpp(DynamicLibrary.open("libllama.dylib"));
+      } else {
+        throw UnsupportedError('Unknown platform: ${Platform.operatingSystem}');
+      }
+    }
+    return _lib!;
+  }
 
   int _nextHandle = 1;
-  String? _backendModuleDirectory;
-  final Set<String> _loadedBackendModules = <String>{};
-  final Set<String> _failedBackendModules = <String>{};
-  final Map<String, DynamicLibrary> _loadedBackendLibraries =
-      <String, DynamicLibrary>{};
-  final List<DynamicLibrary> _preloadedCoreLibraries = <DynamicLibrary>[];
-  bool _backendLoadAllSymbolUnavailable = false;
-  bool _backendLoadAllFromPathSymbolUnavailable = false;
-  bool _backendLoadSymbolUnavailable = false;
-  bool _backendRegistrySymbolUnavailable = false;
-  bool _linuxCorePreloadAttempted = false;
-  bool _linuxRuntimeDepsPrepared = false;
-  String? _linuxPreparedLibraryDirectory;
-  bool _ggmlFallbackLookupAttempted = false;
-  _GgmlBackendLoadDart? _ggmlBackendLoadFallback;
-  _GgmlBackendLoadAllDart? _ggmlBackendLoadAllFallback;
-  _GgmlBackendLoadAllFromPathDart? _ggmlBackendLoadAllFromPathFallback;
-  _GgmlBackendRegisterDart? _ggmlBackendRegisterFallback;
-  bool _logLevelFallbackLookupAttempted = false;
-  String? _logLevelFallbackLookupSearchKey;
-  _LlamaDartSetLogLevelDart? _llamaDartSetLogLevelFallback;
   LlamaLogLevel _configuredLogLevel = LlamaLogLevel.warn;
   String _activeBackendName = 'CPU';
   int _activeResolvedGpuLayers = 0;
-  bool _mtmdFallbackLookupAttempted = false;
   bool _mtmdPrimarySymbolsUnavailable = false;
-  _MtmdApi? _mtmdFallbackApi;
 
   // --- Internal State ---
   final Map<int, _LlamaModelWrapper> _models = {};
@@ -254,31 +141,10 @@ class LlamaCppService {
   }
 
   void _applyConfiguredLogLevel() {
-    var applied = false;
     try {
-      llama_dart_set_log_level(_configuredLogLevel.index);
-      applied = true;
+      lib.common_log_set_verbosity_thold(_configuredLogLevel.index);
     } on ArgumentError {
       // Continue with explicit fallback lookup below.
-    }
-
-    // Apply via explicit wrapper lookup as well. On Windows split bundles the
-    // primary @DefaultAsset can resolve to a different loaded copy than the
-    // runtime backend modules, so applying to both keeps log-level state in
-    // sync across module-loading layouts.
-    _resolveLogLevelFallbackFunction();
-    final fallback = _llamaDartSetLogLevelFallback;
-    if (fallback != null) {
-      try {
-        fallback(_configuredLogLevel.index);
-        applied = true;
-      } catch (_) {
-        // Ignore fallback invocation errors and preserve existing behavior.
-      }
-    }
-
-    if (!applied) {
-      // No applicable symbol found for this runtime layout.
     }
 
     // mtmd/clip uses its own logger callback chain; mirror llama logger so
@@ -292,7 +158,7 @@ class LlamaCppService {
 
     try {
       try {
-        llama_log_get(logCallbackPtr, userDataPtr);
+        lib.llama_log_get(logCallbackPtr, userDataPtr);
       } on ArgumentError {
         return;
       }
@@ -303,22 +169,11 @@ class LlamaCppService {
         return;
       }
 
-      var applied = false;
       if (!_mtmdPrimarySymbolsUnavailable) {
         try {
-          mtmd_log_set(callback, userData);
-          mtmd_helper_log_set(callback, userData);
-          applied = true;
+          lib.mtmd_log_set(callback, userData);
         } on ArgumentError {
           _mtmdPrimarySymbolsUnavailable = true;
-        }
-      }
-
-      if (!applied) {
-        final fallback = _resolveMtmdFallbackApi();
-        if (fallback != null) {
-          fallback.logSet?.call(callback, userData);
-          fallback.helperLogSet?.call(callback, userData);
         }
       }
     } finally {
@@ -331,560 +186,8 @@ class LlamaCppService {
   ///
   /// This must be called before loading any models.
   void initializeBackend() {
-    _prepareLinuxRuntimeDependenciesBeforeBinding();
-    _preloadLinuxCoreLibrariesForSonameResolution();
-    _backendModuleDirectory = resolveBackendModuleDirectory();
-    if (_backendModuleDirectory == null && Platform.isLinux) {
-      _backendModuleDirectory =
-          _linuxPreparedLibraryDirectory ??
-          _resolveLinuxPrimaryLibraryDirectory();
-    }
     _applyConfiguredLogLevel();
-    llama_backend_init();
-    _applyConfiguredLogLevel();
-
-    // Startup path should remain CPU-safe so reading backend options does not
-    // initialize optional GPU backends.
-    if (_backendModuleDirectory != null) {
-      _tryLoadBackendModuleIfBundled('cpu');
-    } else {
-      _tryLoadBackendModule('cpu');
-    }
-
-    if (_backendRegistryOr<int>(0, ggml_backend_reg_count) == 0) {
-      // Fallback path: attempt to load CPU backend by filename resolution.
-      _tryLoadBackendModule('cpu');
-    }
-  }
-
-  void _preloadLinuxCoreLibrariesForSonameResolution() {
-    if (!Platform.isLinux || _linuxCorePreloadAttempted) {
-      return;
-    }
-
-    _linuxCorePreloadAttempted = true;
-
-    // Linux split bundles expose versioned SONAMEs (e.g. libllama.so.0).
-    // Preloading dependency libraries through native-asset URIs ensures their
-    // SONAMEs are already registered before @Native resolves libllamadart.
-    final moduleDir = _resolveLinuxPrimaryLibraryDirectory();
-
-    final preloadCandidates = <List<String>>[
-      <String>[
-        'package:llamadart/ggml-base',
-        if (moduleDir != null) path.join(moduleDir, 'libggml-base.so.0'),
-        if (moduleDir != null) path.join(moduleDir, 'libggml-base.so'),
-      ],
-      <String>[
-        'package:llamadart/ggml',
-        if (moduleDir != null) path.join(moduleDir, 'libggml.so.0'),
-        if (moduleDir != null) path.join(moduleDir, 'libggml.so'),
-      ],
-      <String>[
-        'package:llamadart/llama',
-        if (moduleDir != null) path.join(moduleDir, 'libllama.so.0'),
-        if (moduleDir != null) path.join(moduleDir, 'libllama.so'),
-      ],
-    ];
-
-    for (final candidates in preloadCandidates) {
-      var loaded = false;
-      for (final candidate in candidates) {
-        try {
-          _preloadedCoreLibraries.add(DynamicLibrary.open(candidate));
-          loaded = true;
-          break;
-        } catch (_) {
-          continue;
-        }
-      }
-
-      if (!loaded) {
-        // Best effort: continue and let normal fallback paths handle loading.
-      }
-    }
-  }
-
-  void _prepareLinuxRuntimeDependenciesBeforeBinding() {
-    if (!Platform.isLinux || _linuxRuntimeDepsPrepared) {
-      return;
-    }
-    _linuxRuntimeDepsPrepared = true;
-
-    final targetDir = _resolveLinuxPrimaryLibraryDirectory();
-    if (targetDir == null) {
-      return;
-    }
-
-    final sourceDirectories = _linuxDependencySourceDirectories(targetDir);
-    const coreLibraries = <String>[
-      'libggml-base.so',
-      'libggml.so',
-      'libllama.so',
-    ];
-
-    for (final libraryFileName in coreLibraries) {
-      _ensureLinuxLibraryPresent(
-        targetDirectory: targetDir,
-        sourceDirectories: sourceDirectories,
-        fileName: libraryFileName,
-      );
-      _ensureLinuxSonameAlias(targetDir, libraryFileName);
-    }
-
-    const backendModuleLibraries = <String>[
-      'libggml-cpu.so',
-      'libggml-vulkan.so',
-      'libggml-opencl.so',
-      'libggml-cuda.so',
-      'libggml-blas.so',
-      'libggml-hip.so',
-    ];
-
-    for (final libraryFileName in backendModuleLibraries) {
-      _ensureLinuxLibraryPresent(
-        targetDirectory: targetDir,
-        sourceDirectories: sourceDirectories,
-        fileName: libraryFileName,
-      );
-      _ensureLinuxSonameAlias(targetDir, libraryFileName);
-    }
-
-    _linuxPreparedLibraryDirectory = targetDir;
-  }
-
-  String? _resolveLinuxPrimaryLibraryDirectory() {
-    final candidates = <String>{
-      path.join(Directory.current.path, '.dart_tool', 'lib'),
-      path.dirname(Platform.resolvedExecutable),
-      Directory.current.path,
-    };
-
-    for (final candidate in candidates) {
-      final directory = Directory(candidate);
-      if (!directory.existsSync()) {
-        continue;
-      }
-      final hasPrimary =
-          File(path.join(candidate, 'libllamadart.so')).existsSync() ||
-          File(path.join(candidate, 'libllamadart.so.0')).existsSync();
-      if (hasPrimary) {
-        return candidate;
-      }
-    }
-
-    return null;
-  }
-
-  List<String> _linuxDependencySourceDirectories(String targetDirectory) {
-    final dirs = <String>{targetDirectory};
-    final bundleNames = _linuxBundleNamesForCurrentAbi();
-    if (bundleNames.isEmpty) {
-      return dirs.toList(growable: false);
-    }
-
-    final cacheRoot = Directory(
-      path.join(
-        Directory.current.path,
-        '.dart_tool',
-        'llamadart',
-        'native_bundles',
-      ),
-    );
-    if (!cacheRoot.existsSync()) {
-      return dirs.toList(growable: false);
-    }
-
-    final tagDirectories = cacheRoot.listSync().whereType<Directory>().toList()
-      ..sort((a, b) => path.basename(b.path).compareTo(path.basename(a.path)));
-
-    for (final tagDir in tagDirectories) {
-      for (final bundleName in bundleNames) {
-        final extractedDir = Directory(
-          path.join(tagDir.path, bundleName, 'extracted'),
-        );
-        if (extractedDir.existsSync()) {
-          dirs.add(extractedDir.path);
-        }
-      }
-    }
-
-    return dirs.toList(growable: false);
-  }
-
-  List<String> _linuxBundleNamesForCurrentAbi() {
-    switch (Abi.current()) {
-      case Abi.linuxArm64:
-        return const <String>['linux-arm64'];
-      case Abi.linuxX64:
-        return const <String>['linux-x64'];
-      default:
-        return const <String>[];
-    }
-  }
-
-  void _ensureLinuxLibraryPresent({
-    required String targetDirectory,
-    required List<String> sourceDirectories,
-    required String fileName,
-  }) {
-    final targetPath = path.join(targetDirectory, fileName);
-    if (File(targetPath).existsSync()) {
-      return;
-    }
-
-    for (final sourceDirectory in sourceDirectories) {
-      final sourcePath = path.join(sourceDirectory, fileName);
-      final sourceFile = File(sourcePath);
-      if (!sourceFile.existsSync()) {
-        continue;
-      }
-      try {
-        sourceFile.copySync(targetPath);
-        return;
-      } catch (_) {
-        continue;
-      }
-    }
-  }
-
-  void _ensureLinuxSonameAlias(String directory, String baseFileName) {
-    final sourcePath = path.join(directory, baseFileName);
-    final sourceFile = File(sourcePath);
-    if (!sourceFile.existsSync()) {
-      return;
-    }
-
-    final aliasPath = '$sourcePath.0';
-    final aliasFile = File(aliasPath);
-    if (aliasFile.existsSync()) {
-      return;
-    }
-
-    try {
-      Link(aliasPath).createSync(baseFileName);
-      return;
-    } catch (_) {
-      // Fall through to copying when symlinks are unavailable.
-    }
-
-    try {
-      sourceFile.copySync(aliasPath);
-    } catch (_) {
-      // Best effort only.
-    }
-  }
-
-  bool _tryLoadAllBackendsBestEffort() {
-    if (_backendLoadAllSymbolUnavailable) {
-      return false;
-    }
-
-    try {
-      ggml_backend_load_all();
-      return true;
-    } on ArgumentError {
-      _resolveGgmlFallbackFunctions();
-      final fallback = _ggmlBackendLoadAllFallback;
-      if (fallback != null) {
-        fallback();
-        return true;
-      }
-
-      // Some split bundles don't expose this symbol on the primary FFI asset.
-      // Continue with explicit backend-module loading fallback.
-      _backendLoadAllSymbolUnavailable = true;
-      return false;
-    }
-  }
-
-  bool _tryLoadAllBackendsFromPathBestEffort(String directoryPath) {
-    if (_backendLoadAllFromPathSymbolUnavailable) {
-      return false;
-    }
-
-    final directoryPathPtr = directoryPath.toNativeUtf8();
-    try {
-      try {
-        ggml_backend_load_all_from_path(directoryPathPtr.cast());
-        return true;
-      } on ArgumentError {
-        _resolveGgmlFallbackFunctions();
-        final fallback = _ggmlBackendLoadAllFromPathFallback;
-        if (fallback != null) {
-          fallback(directoryPathPtr.cast());
-          return true;
-        }
-
-        _backendLoadAllFromPathSymbolUnavailable = true;
-        return false;
-      }
-    } finally {
-      malloc.free(directoryPathPtr);
-    }
-  }
-
-  /// Resolves the native backend module directory for dynamic backend loading.
-  ///
-  /// On Android/Linux we inspect `/proc/self/maps` to find the loaded
-  /// `libllamadart.so` location, then load backend modules from that directory.
-  /// Returns `null` when the path cannot be resolved.
-  static String? resolveBackendModuleDirectory() {
-    if (Platform.isWindows) {
-      return resolveWindowsBackendModuleDirectory(
-        resolvedExecutablePath: Platform.resolvedExecutable,
-        currentDirectoryPath: Directory.current.path,
-        environment: Platform.environment,
-      );
-    }
-
-    if (!Platform.isAndroid && !Platform.isLinux) {
-      return null;
-    }
-
-    try {
-      final mapsFile = File('/proc/self/maps');
-      if (!mapsFile.existsSync()) {
-        return null;
-      }
-
-      final mapsContent = mapsFile.readAsStringSync();
-      return parseBackendModuleDirectoryFromProcMaps(mapsContent);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  /// Resolves Windows backend-module directory for dynamic backend loading.
-  ///
-  /// Resolution order:
-  /// 1. Explicit environment override (`LLAMADART_NATIVE_LIB_DIR` or
-  ///    `LLAMADART_BACKEND_MODULE_DIR`)
-  /// 2. Directory of resolved executable (if it looks like a native bundle)
-  /// 3. Current working directory (if it looks like a native bundle)
-  /// 4. Hook cache under `.dart_tool/llamadart/native_bundles/*/windows-*/`
-  /// 5. Directory of resolved executable (best-effort fallback)
-  static String? resolveWindowsBackendModuleDirectory({
-    required String resolvedExecutablePath,
-    required String currentDirectoryPath,
-    required Map<String, String> environment,
-  }) {
-    final overrideCandidates = <String>[
-      environment['LLAMADART_NATIVE_LIB_DIR'] ?? '',
-      environment['LLAMADART_BACKEND_MODULE_DIR'] ?? '',
-    ];
-    for (final override in overrideCandidates) {
-      if (override.isEmpty) {
-        continue;
-      }
-      if (_containsWindowsNativeModules(override)) {
-        return override;
-      }
-    }
-
-    final executableDir = path.dirname(resolvedExecutablePath);
-    if (_containsWindowsNativeModules(executableDir)) {
-      return executableDir;
-    }
-
-    if (_containsWindowsNativeModules(currentDirectoryPath)) {
-      return currentDirectoryPath;
-    }
-
-    final dartToolLibDir = _findDartToolLibDirectory(currentDirectoryPath);
-    if (dartToolLibDir != null) {
-      return dartToolLibDir;
-    }
-
-    final preferredBundle = _preferredWindowsBundleName();
-    final hookCacheDir = _findHookCacheWindowsBundleDirectory(
-      currentDirectoryPath,
-      preferredBundleName: preferredBundle,
-    );
-    if (hookCacheDir != null) {
-      return hookCacheDir;
-    }
-
-    return executableDir;
-  }
-
-  static String? _preferredWindowsBundleName() {
-    switch (Abi.current()) {
-      case Abi.windowsX64:
-        return 'windows-x64';
-      case Abi.windowsArm64:
-        return 'windows-arm64';
-      default:
-        return null;
-    }
-  }
-
-  static String? _findHookCacheWindowsBundleDirectory(
-    String currentDirectoryPath, {
-    String? preferredBundleName,
-  }) {
-    var cursor = Directory(currentDirectoryPath).absolute;
-    while (true) {
-      final cacheRoot = Directory(
-        path.join(cursor.path, '.dart_tool', 'llamadart', 'native_bundles'),
-      );
-      if (cacheRoot.existsSync()) {
-        final found = _selectWindowsBundleDirectoryFromCache(
-          cacheRoot.path,
-          preferredBundleName: preferredBundleName,
-        );
-        if (found != null) {
-          return found;
-        }
-      }
-
-      final parent = cursor.parent;
-      if (parent.path == cursor.path) {
-        break;
-      }
-      cursor = parent;
-    }
-
-    return null;
-  }
-
-  static String? _selectWindowsBundleDirectoryFromCache(
-    String cacheRootPath, {
-    String? preferredBundleName,
-  }) {
-    final cacheRoot = Directory(cacheRootPath);
-    List<Directory> tagDirectories;
-    try {
-      tagDirectories = cacheRoot.listSync().whereType<Directory>().toList(
-        growable: false,
-      );
-    } catch (_) {
-      return null;
-    }
-
-    tagDirectories.sort(
-      (a, b) => path.basename(b.path).compareTo(path.basename(a.path)),
-    );
-
-    for (final tagDirectory in tagDirectories) {
-      final bundleDirs = <Directory>[];
-      if (preferredBundleName != null) {
-        final preferred = Directory(
-          path.join(tagDirectory.path, preferredBundleName),
-        );
-        if (preferred.existsSync()) {
-          bundleDirs.add(preferred);
-        }
-      }
-
-      try {
-        final otherWindowsBundles = tagDirectory
-            .listSync()
-            .whereType<Directory>()
-            .where(
-              (directory) =>
-                  path.basename(directory.path).startsWith('windows-'),
-            )
-            .toList(growable: false);
-        bundleDirs.addAll(otherWindowsBundles);
-      } catch (_) {
-        // Ignore and continue with what we have.
-      }
-
-      final seen = <String>{};
-      for (final bundleDir in bundleDirs) {
-        final normalizedBundle = path.normalize(bundleDir.path);
-        if (!seen.add(normalizedBundle)) {
-          continue;
-        }
-
-        final extractedDir = path.join(bundleDir.path, 'extracted');
-        if (_containsWindowsNativeModules(extractedDir)) {
-          return extractedDir;
-        }
-        if (_containsWindowsNativeModules(bundleDir.path)) {
-          return bundleDir.path;
-        }
-      }
-    }
-
-    return null;
-  }
-
-  static bool _containsWindowsNativeModules(String directoryPath) {
-    try {
-      final directory = Directory(directoryPath);
-      if (!directory.existsSync()) {
-        return false;
-      }
-
-      final fileNames = directory
-          .listSync()
-          .whereType<File>()
-          .map((file) => path.basename(file.path).toLowerCase())
-          .toSet();
-
-      final hasLlama = fileNames.any(
-        (name) => RegExp(r'^llama(?:-[^.\\/]+)*\.dll$').hasMatch(name),
-      );
-      final hasGgml = fileNames.any(
-        (name) => RegExp(r'^ggml(?:-[^.\\/]+)*\.dll$').hasMatch(name),
-      );
-      final hasCpuBackend = fileNames.any(
-        (name) => RegExp(r'^ggml-cpu(?:-[^.\\/]+)*\.dll$').hasMatch(name),
-      );
-      return hasLlama && hasGgml && hasCpuBackend;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  static String? _findDartToolLibDirectory(String currentDirectoryPath) {
-    var cursor = Directory(currentDirectoryPath).absolute;
-    while (true) {
-      final dartToolLib = path.join(cursor.path, '.dart_tool', 'lib');
-      if (_containsWindowsNativeModules(dartToolLib)) {
-        return dartToolLib;
-      }
-
-      final parent = cursor.parent;
-      if (parent.path == cursor.path) {
-        break;
-      }
-      cursor = parent;
-    }
-
-    return null;
-  }
-
-  /// Parses `/proc/self/maps` content and returns the module directory.
-  ///
-  /// This is exposed for testability.
-  static String? parseBackendModuleDirectoryFromProcMaps(String mapsContent) {
-    for (final rawLine in mapsContent.split('\n')) {
-      final line = rawLine.trim();
-      if (line.isEmpty) {
-        continue;
-      }
-
-      final slashIndex = line.indexOf('/');
-      if (slashIndex < 0) {
-        continue;
-      }
-
-      final mappedPath = line.substring(slashIndex).trim();
-      final normalizedPath = mappedPath.endsWith(' (deleted)')
-          ? mappedPath.substring(0, mappedPath.length - ' (deleted)'.length)
-          : mappedPath;
-
-      if (!normalizedPath.endsWith('/libllamadart.so')) {
-        continue;
-      }
-
-      return path.dirname(normalizedPath);
-    }
-
-    return null;
+    lib.llama_backend_init();
   }
 
   /// Loads a model from the specified [modelPath].
@@ -908,10 +211,9 @@ class LlamaCppService {
     }
 
     _applyConfiguredLogLevel();
-    _prepareBackendsForModelLoad(modelParams.preferredBackend);
 
     final modelPathPtr = modelPath.toNativeUtf8();
-    final mparams = llama_model_default_params();
+    final mparams = lib.llama_model_default_params();
     var preferredDevices = _createPreferredDeviceList(
       modelParams.preferredBackend,
     );
@@ -921,11 +223,7 @@ class LlamaCppService {
     final explicitGpuBackend =
         modelParams.preferredBackend != GpuBackend.auto &&
         modelParams.preferredBackend != GpuBackend.cpu;
-    if (explicitGpuBackend &&
-        preferredDevices == null &&
-        _shouldForceCpuFallbackForMissingPreferredDevices(
-          modelParams.preferredBackend,
-        )) {
+    if (explicitGpuBackend && preferredDevices == null) {
       // Honor explicit backend intent: if requested GPU backend is unavailable,
       // fall back to CPU instead of letting another GPU backend auto-select.
       preferredDevices = _createPreferredDeviceList(GpuBackend.cpu);
@@ -942,7 +240,7 @@ class LlamaCppService {
 
     Pointer<llama_model> modelPtr = nullptr;
     try {
-      modelPtr = llama_model_load_from_file(modelPathPtr.cast(), mparams);
+      modelPtr = lib.llama_model_load_from_file(modelPathPtr.cast(), mparams);
     } finally {
       malloc.free(modelPathPtr);
       if (preferredDevices != null) {
@@ -959,7 +257,7 @@ class LlamaCppService {
     }
 
     final handle = _getHandle();
-    _models[handle] = _LlamaModelWrapper(modelPtr);
+    _models[handle] = _LlamaModelWrapper(modelPtr, lib);
     _loraAdapters[handle] = {};
     _modelToMtmdUseGpu[handle] = mtmdUseGpu;
     final resolvedBackend = _resolveBackendNameForLoad(
@@ -1033,20 +331,6 @@ class LlamaCppService {
     return null;
   }
 
-  bool _shouldForceCpuFallbackForMissingPreferredDevices(
-    GpuBackend requestedBackend,
-  ) {
-    final backendModuleDirectory = _backendModuleDirectory;
-    if (backendModuleDirectory == null) {
-      // Consolidated runtimes (notably Apple) do not expose per-backend
-      // dynamic modules. Missing preferred-device pointers here does not
-      // reliably mean GPU is unavailable.
-      return false;
-    }
-
-    return !_isBackendModuleBundled(requestedBackend.name);
-  }
-
   static bool _backendInfoContainsBackendMarker(
     String value,
     GpuBackend backend,
@@ -1072,644 +356,15 @@ class LlamaCppService {
     }
   }
 
-  void _prepareBackendsForModelLoad(GpuBackend preferredBackend) {
-    // Apple bundles are consolidated into a single native library and do not
-    // ship separate ggml backend modules.
-    if ((Platform.isMacOS || Platform.isIOS) &&
-        _backendModuleDirectory == null) {
-      return;
-    }
-    final backendModuleDirectory = _backendModuleDirectory;
-
-    switch (preferredBackend) {
-      case GpuBackend.auto:
-        final loadedAll = backendModuleDirectory == null
-            ? _tryLoadAllBackendsBestEffort()
-            : _tryLoadAllBackendsFromPathBestEffort(backendModuleDirectory);
-
-        if (!loadedAll) {
-          // Fallback when load-all symbols are unavailable.
-          _tryLoadBackendModuleIfBundled('cpu');
-        }
-
-        if (Platform.isAndroid || Platform.isLinux || Platform.isWindows) {
-          _tryLoadBackendModuleIfBundled('vulkan');
-        }
-        if (Platform.isLinux || Platform.isWindows) {
-          _tryLoadBackendModuleIfBundled('blas');
-          _tryLoadBackendModuleIfBundled('cuda');
-        }
-        if (Platform.isLinux) {
-          _tryLoadBackendModuleIfBundled('hip');
-        }
-        return;
-      case GpuBackend.cpu:
-        // Explicit CPU mode must not initialize optional GPU backends.
-        _tryLoadBackendModuleIfBundled('cpu');
-        return;
-      case GpuBackend.vulkan:
-        _tryLoadBackendModuleIfBundled('cpu');
-        _tryLoadBackendModuleIfBundled('vulkan');
-        return;
-      case GpuBackend.metal:
-        _tryLoadBackendModuleIfBundled('cpu');
-        _tryLoadBackendModuleIfBundled('metal');
-        return;
-      case GpuBackend.cuda:
-        _tryLoadBackendModuleIfBundled('cpu');
-        _tryLoadBackendModuleIfBundled('cuda');
-        return;
-      case GpuBackend.blas:
-        _tryLoadBackendModuleIfBundled('cpu');
-        _tryLoadBackendModuleIfBundled('blas');
-        return;
-      case GpuBackend.opencl:
-        _tryLoadBackendModuleIfBundled('cpu');
-        _tryLoadBackendModuleIfBundled('opencl');
-        return;
-      case GpuBackend.hip:
-        _tryLoadBackendModuleIfBundled('cpu');
-        _tryLoadBackendModuleIfBundled('hip');
-        return;
-    }
-  }
-
-  void _tryLoadBackendModuleIfBundled(String backend) {
-    if (_backendModuleDirectory != null && !_isBackendModuleBundled(backend)) {
-      return;
-    }
-    _tryLoadBackendModule(backend);
-  }
-
-  bool _isBackendModuleBundled(String backend) {
-    final backendModuleDirectory = _backendModuleDirectory;
-    if (backendModuleDirectory == null) {
-      return true;
-    }
-
-    final fileNameCandidates = _backendLibraryCandidateFileNames(backend);
-    if (fileNameCandidates.isEmpty) {
-      return false;
-    }
-
-    for (final fileName in fileNameCandidates) {
-      final fullPath = path.join(backendModuleDirectory, fileName);
-      if (File(fullPath).existsSync()) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  bool _tryLoadBackendModule(String backend) {
-    if (_backendLoadSymbolUnavailable) {
-      return false;
-    }
-
-    if (_loadedBackendModules.contains(backend)) {
-      return true;
-    }
-    if (_failedBackendModules.contains(backend)) {
-      return false;
-    }
-
-    final fileNameCandidates = _backendLibraryCandidateFileNames(backend);
-    final candidates = <String>{};
-    final backendModuleDirectory = _backendModuleDirectory;
-    if (backendModuleDirectory != null) {
-      for (final fileName in fileNameCandidates) {
-        candidates.add(path.join(backendModuleDirectory, fileName));
-      }
-    } else {
-      // No resolved module directory: rely on platform search paths.
-      candidates.addAll(fileNameCandidates);
-    }
-
-    for (final candidate in candidates) {
-      if (path.isAbsolute(candidate) && !File(candidate).existsSync()) {
-        continue;
-      }
-
-      final libraryPathPtr = candidate.toNativeUtf8();
-      try {
-        ggml_backend_reg_t reg;
-        try {
-          reg = ggml_backend_load(libraryPathPtr.cast());
-        } on ArgumentError {
-          _resolveGgmlFallbackFunctions();
-          final fallback = _ggmlBackendLoadFallback;
-          if (fallback == null) {
-            // Optional dynamic-loader symbol can be missing from the primary
-            // FFI asset in split bundles. If ggml fallback is unavailable,
-            // stop retrying.
-            _backendLoadSymbolUnavailable = true;
-            return false;
-          }
-          reg = fallback(libraryPathPtr.cast());
-        }
-        if (reg == nullptr) {
-          continue;
-        }
-
-        // Best-effort compatibility call for runtimes where explicit register is
-        // required after dynamic load. We still consider the module load
-        // successful even if this symbol is unavailable.
-        _registerBackendRegBestEffort(reg);
-        _loadedBackendModules.add(backend);
-        _failedBackendModules.remove(backend);
-        return true;
-      } finally {
-        malloc.free(libraryPathPtr);
-      }
-    }
-
-    if (_tryRegisterBackendModuleViaAsset(backend)) {
-      return true;
-    }
-
-    _failedBackendModules.add(backend);
-    return false;
-  }
-
-  List<String> _backendAssetUriCandidates(String backend) {
-    final candidates = <String>{
-      'package:llamadart/$backend',
-      'package:llamadart/ggml_$backend',
-      'package:llamadart/ggml-$backend',
-    };
-
-    if (backend == 'cpu' && Platform.isAndroid) {
-      for (final variant in _androidCpuVariantPriority.keys) {
-        candidates.add(
-          'package:llamadart/ggml-cpu-${variant.replaceAll('.', '_')}',
-        );
-      }
-      candidates.add('package:llamadart/ggml-cpu');
-    }
-
-    return candidates.toList(growable: false);
-  }
-
-  bool _tryRegisterBackendModuleViaAsset(String backend) {
-    final assetCandidates = _backendAssetUriCandidates(backend);
-
-    for (final assetUri in assetCandidates) {
-      try {
-        final library = DynamicLibrary.open(assetUri);
-        final init = library
-            .lookupFunction<_GgmlBackendInitNative, _GgmlBackendInitDart>(
-              'ggml_backend_init',
-            );
-        final reg = init();
-        if (reg == nullptr) {
-          continue;
-        }
-
-        // Asset init path requires explicit backend registration.
-        if (!_registerBackendRegBestEffort(reg)) {
-          continue;
-        }
-        _loadedBackendLibraries[backend] = library;
-        _loadedBackendModules.add(backend);
-        return true;
-      } catch (_) {
-        continue;
-      }
-    }
-
-    return false;
-  }
-
-  bool _registerBackendRegBestEffort(ggml_backend_reg_t reg) {
-    try {
-      ggml_backend_register(reg);
-      return true;
-    } on ArgumentError {
-      _resolveGgmlFallbackFunctions();
-      final fallback = _ggmlBackendRegisterFallback;
-      if (fallback == null) {
-        return false;
-      }
-      try {
-        fallback(reg);
-        return true;
-      } catch (_) {
-        return false;
-      }
-    }
-  }
-
-  void _resolveGgmlFallbackFunctions() {
-    if (_ggmlFallbackLookupAttempted) {
-      return;
-    }
-    _ggmlFallbackLookupAttempted = true;
-
-    final fileNameCandidates = _ggmlLibraryCandidateFileNames();
-    final candidates = <String>[..._ggmlAssetUriCandidates()];
-    final filesystemCandidates = <String>{};
-    final backendModuleDirectory = _backendModuleDirectory;
-    if (backendModuleDirectory != null) {
-      for (final fileName in fileNameCandidates) {
-        filesystemCandidates.add(path.join(backendModuleDirectory, fileName));
-      }
-    }
-    // Keep bare-name fallback last so module-dir resolution wins when present.
-    filesystemCandidates.addAll(fileNameCandidates);
-    candidates.addAll(filesystemCandidates);
-
-    final seen = <String>{};
-    for (final candidate in candidates) {
-      if (!seen.add(candidate)) {
-        continue;
-      }
-
-      DynamicLibrary library;
-      try {
-        library = DynamicLibrary.open(candidate);
-      } catch (_) {
-        continue;
-      }
-
-      if (_ggmlBackendLoadFallback == null) {
-        try {
-          _ggmlBackendLoadFallback = library
-              .lookupFunction<_GgmlBackendLoadNative, _GgmlBackendLoadDart>(
-                'ggml_backend_load',
-              );
-        } catch (_) {
-          // Keep searching other candidates.
-        }
-      }
-
-      if (_ggmlBackendLoadAllFallback == null) {
-        try {
-          _ggmlBackendLoadAllFallback = library
-              .lookupFunction<
-                _GgmlBackendLoadAllNative,
-                _GgmlBackendLoadAllDart
-              >('ggml_backend_load_all');
-        } catch (_) {
-          // Keep searching other candidates.
-        }
-      }
-
-      if (_ggmlBackendLoadAllFromPathFallback == null) {
-        try {
-          _ggmlBackendLoadAllFromPathFallback = library
-              .lookupFunction<
-                _GgmlBackendLoadAllFromPathNative,
-                _GgmlBackendLoadAllFromPathDart
-              >('ggml_backend_load_all_from_path');
-        } catch (_) {
-          // Keep searching other candidates.
-        }
-      }
-
-      if (_ggmlBackendRegisterFallback == null) {
-        try {
-          _ggmlBackendRegisterFallback = library
-              .lookupFunction<
-                _GgmlBackendRegisterNative,
-                _GgmlBackendRegisterDart
-              >('ggml_backend_register');
-        } catch (_) {
-          // Keep searching other candidates.
-        }
-      }
-
-      if (_ggmlBackendLoadFallback != null &&
-          _ggmlBackendLoadAllFallback != null &&
-          _ggmlBackendLoadAllFromPathFallback != null &&
-          _ggmlBackendRegisterFallback != null) {
-        return;
-      }
-    }
-  }
-
-  List<String> _ggmlAssetUriCandidates() {
-    if (Platform.isWindows) {
-      return const <String>[
-        'package:llamadart/ggml',
-        'package:llamadart/ggml-base',
-      ];
-    }
-    return const <String>['package:llamadart/ggml'];
-  }
-
-  void _resolveLogLevelFallbackFunction() {
-    final directories = _llamadartFallbackLookupDirectories();
-    final searchKey = directories.map(path.normalize).join('|');
-
-    if (_logLevelFallbackLookupAttempted &&
-        _llamaDartSetLogLevelFallback != null) {
-      return;
-    }
-
-    if (_logLevelFallbackLookupAttempted &&
-        _llamaDartSetLogLevelFallback == null &&
-        _logLevelFallbackLookupSearchKey == searchKey) {
-      return;
-    }
-
-    _logLevelFallbackLookupAttempted = true;
-    _logLevelFallbackLookupSearchKey = searchKey;
-
-    final fileNameCandidates = _llamadartLibraryCandidateFileNames();
-    final candidates = <String>[..._llamadartAssetUriCandidates()];
-    final pattern = _llamadartLibraryPattern();
-    for (final directoryPath in directories) {
-      for (final fileName in fileNameCandidates) {
-        candidates.add(path.join(directoryPath, fileName));
-      }
-      for (final fileName in _matchingLibraryNames(directoryPath, pattern)) {
-        candidates.add(path.join(directoryPath, fileName));
-      }
-    }
-    // Keep bare-name fallback last so module-dir resolution wins when present.
-    candidates.addAll(fileNameCandidates);
-
-    final seen = <String>{};
-    for (final candidate in candidates) {
-      if (!seen.add(candidate)) {
-        continue;
-      }
-      try {
-        final library = DynamicLibrary.open(candidate);
-        _llamaDartSetLogLevelFallback = library
-            .lookupFunction<
-              _LlamaDartSetLogLevelNative,
-              _LlamaDartSetLogLevelDart
-            >('llama_dart_set_log_level');
-        return;
-      } catch (_) {
-        continue;
-      }
-    }
-  }
-
-  List<String> _llamadartAssetUriCandidates() {
-    // Prefer asset-URI resolution so Windows split bundles can reliably resolve
-    // the wrapper helper library without relying on process cwd/search paths.
-    if (Platform.isWindows) {
-      return const <String>[
-        'package:llamadart/llamadart_wrapper',
-        'package:llamadart/llamadart',
-      ];
-    }
-    return const <String>['package:llamadart/llamadart'];
-  }
-
-  List<String> _llamadartFallbackLookupDirectories() {
-    final directories = <String>{};
-    final backendModuleDirectory = _backendModuleDirectory;
-    if (backendModuleDirectory != null) {
-      directories.add(backendModuleDirectory);
-    }
-
-    final executableDir = path.dirname(Platform.resolvedExecutable);
-    directories.add(executableDir);
-    directories.add(Directory.current.path);
-
-    if (Platform.isMacOS) {
-      directories.add(
-        path.normalize(path.join(executableDir, '..', 'Frameworks')),
-      );
-      directories.add(path.normalize(path.join(executableDir, 'Frameworks')));
-    }
-
-    return directories.toList(growable: false);
-  }
-
-  static String _ggmlLibraryFileName() {
-    if (Platform.isWindows) {
-      return 'ggml.dll';
-    }
-    if (Platform.isMacOS || Platform.isIOS) {
-      return 'libggml.dylib';
-    }
-    return 'libggml.so';
-  }
-
-  static String _llamadartLibraryFileName() {
-    if (Platform.isWindows) {
-      return 'llamadart.dll';
-    }
-    if (Platform.isMacOS || Platform.isIOS) {
-      return 'libllamadart.dylib';
-    }
-    return 'libllamadart.so';
-  }
-
-  List<String> _backendLibraryCandidateFileNames(String backend) {
-    final baseName = _backendLibraryFileName(backend);
-    final backendModuleDirectory = _backendModuleDirectory;
-    if (backendModuleDirectory == null) {
-      if (backend == 'cpu' && Platform.isAndroid) {
-        final variants = _androidCpuVariantPriority.keys
-            .map((variant) => 'libggml-cpu-$variant.so')
-            .toList(growable: false);
-        return <String>[...variants, baseName];
-      }
-      return <String>[baseName];
-    }
-
-    final candidates = <String>{};
-    final basePath = path.join(backendModuleDirectory, baseName);
-    if (File(basePath).existsSync()) {
-      candidates.add(baseName);
-    }
-    final dynamicNames = _matchingLibraryNames(
-      backendModuleDirectory,
-      _backendLibraryPattern(backend),
-    );
-    if (backend == 'cpu' && Platform.isAndroid) {
-      dynamicNames.sort(_compareAndroidCpuLibraryCandidates);
-    }
-    candidates.addAll(dynamicNames);
-    final resolved = candidates.toList(growable: false);
-    if (backend == 'cpu' && Platform.isAndroid) {
-      resolved.sort(_compareAndroidCpuLibraryCandidates);
-    }
-    return resolved;
-  }
-
-  static int _compareAndroidCpuLibraryCandidates(String a, String b) {
-    final rankA = _androidCpuLibraryCandidateRank(a);
-    final rankB = _androidCpuLibraryCandidateRank(b);
-    if (rankA != rankB) {
-      return rankA.compareTo(rankB);
-    }
-    return a.compareTo(b);
-  }
-
-  static int _androidCpuLibraryCandidateRank(String fileName) {
-    final lowered = fileName.toLowerCase();
-    if (lowered == 'libggml-cpu.so') {
-      return 1000;
-    }
-
-    final variantMatch = RegExp(
-      r'^libggml-cpu-([^/\\]+)\.so$',
-    ).firstMatch(lowered);
-    if (variantMatch == null) {
-      return 2000;
-    }
-
-    final variant = variantMatch.group(1)!;
-    return _androidCpuVariantPriority[variant] ?? 900;
-  }
-
-  List<String> _ggmlLibraryCandidateFileNames() {
-    final baseName = _ggmlLibraryFileName();
-    final candidates = <String>{baseName};
-    final backendModuleDirectory = _backendModuleDirectory;
-    if (backendModuleDirectory == null) {
-      return candidates.toList(growable: false);
-    }
-
-    final dynamicNames = _matchingLibraryNames(
-      backendModuleDirectory,
-      _ggmlLibraryPattern(),
-    );
-    candidates.addAll(dynamicNames);
-    return candidates.toList(growable: false);
-  }
-
-  List<String> _llamadartLibraryCandidateFileNames() {
-    final candidates = _llamadartStaticCandidateFileNames();
-    final backendModuleDirectory = _backendModuleDirectory;
-    if (backendModuleDirectory == null) {
-      return candidates.toList(growable: false);
-    }
-
-    final dynamicNames = _matchingLibraryNames(
-      backendModuleDirectory,
-      _llamadartLibraryPattern(),
-    );
-    candidates.addAll(dynamicNames);
-    return candidates.toList(growable: false);
-  }
-
-  Set<String> _llamadartStaticCandidateFileNames() {
-    final candidates = <String>{_llamadartLibraryFileName()};
-    if (Platform.isWindows) {
-      // Hook asset naming can expose wrapper helper as `llamadart_wrapper.dll`.
-      candidates.add('llamadart_wrapper.dll');
-    }
-    return candidates;
-  }
-
-  RegExp _backendLibraryPattern(String backend) {
-    final escapedBackend = RegExp.escape(backend);
-    if (Platform.isWindows) {
-      return RegExp('^ggml-$escapedBackend(?:-[^\\\\/]+)*\\.dll\$');
-    }
-    if (Platform.isMacOS || Platform.isIOS) {
-      return RegExp('^libggml-$escapedBackend(?:-[^\\\\/]+)*\\.dylib\$');
-    }
-    return RegExp('^libggml-$escapedBackend(?:-[^\\\\/]+)*\\.so\$');
-  }
-
-  RegExp _ggmlLibraryPattern() {
-    if (Platform.isWindows) {
-      return RegExp(r'^ggml(?:-[^.\\/]+)*\.dll$');
-    }
-    if (Platform.isMacOS || Platform.isIOS) {
-      return RegExp(r'^libggml(?:-[^.\\/]+)*\.dylib$');
-    }
-    return RegExp(r'^libggml(?:-[^.\\/]+)*\.so$');
-  }
-
-  RegExp _llamadartLibraryPattern() {
-    if (Platform.isWindows) {
-      return RegExp(r'^llamadart(?:[-_][^.\\/]+)*\.dll$');
-    }
-    if (Platform.isMacOS || Platform.isIOS) {
-      return RegExp(r'^libllamadart(?:[-_][^.\\/]+)*\.dylib$');
-    }
-    return RegExp(r'^libllamadart(?:[-_][^.\\/]+)*\.so$');
-  }
-
-  static List<String> _matchingLibraryNames(
-    String directoryPath,
-    RegExp regex,
-  ) {
-    try {
-      final names = <String>[];
-      for (final entity in Directory(directoryPath).listSync()) {
-        if (entity is! File) {
-          continue;
-        }
-        final name = path.basename(entity.path);
-        if (regex.hasMatch(name)) {
-          names.add(name);
-        }
-      }
-      names.sort();
-      return names;
-    } catch (_) {
-      return const [];
-    }
-  }
-
-  T _backendRegistryOr<T>(T fallback, T Function() call) {
-    try {
-      return call();
-    } on ArgumentError {
-      // Some split bundles may omit a subset of registry symbols on the
-      // primary lookup target. Treat this call as unavailable, but continue
-      // attempting other registry APIs that may still be present.
-      _backendRegistrySymbolUnavailable = true;
-      return fallback;
-    }
-  }
-
-  static String _backendLibraryFileName(String backend) {
-    if (Platform.isWindows) {
-      return 'ggml-$backend.dll';
-    }
-    if (Platform.isMacOS || Platform.isIOS) {
-      return 'libggml-$backend.dylib';
-    }
-    return 'libggml-$backend.so';
-  }
-
-  static bool _looksLikeGguf(File modelFile) {
-    try {
-      final header = modelFile.openSync(mode: FileMode.read);
-      try {
-        final magic = header.readSync(4);
-        if (magic.length < 4) {
-          return false;
-        }
-        return magic[0] == 0x47 &&
-            magic[1] == 0x47 &&
-            magic[2] == 0x55 &&
-            magic[3] == 0x46;
-      } finally {
-        header.closeSync();
-      }
-    } catch (_) {
-      return false;
-    }
-  }
-
   String _backendDiagnostics() {
     final regs = <String>[];
-    final regCount = _backendRegistryOr<int>(0, ggml_backend_reg_count);
+    final regCount = lib.ggml_backend_reg_count();
     for (var i = 0; i < regCount; i++) {
-      final reg = _backendRegistryOr<ggml_backend_reg_t>(
-        nullptr,
-        () => ggml_backend_reg_get(i),
-      );
+      final reg = lib.ggml_backend_reg_get(i);
       if (reg == nullptr) {
         continue;
       }
-      final regNamePtr = _backendRegistryOr<Pointer<Char>>(
-        nullptr,
-        () => ggml_backend_reg_name(reg),
-      );
+      final regNamePtr = lib.ggml_backend_reg_name(reg);
       if (regNamePtr == nullptr) {
         continue;
       }
@@ -1717,10 +372,7 @@ class LlamaCppService {
     }
 
     final devices = getBackendInfo();
-    return '{moduleDir=${_backendModuleDirectory ?? "null"}, '
-        'loadedModules=${_loadedBackendModules.toList(growable: false)}, '
-        'registeredBackends=$regs, devices=$devices, '
-        'registryApisUnavailable=$_backendRegistrySymbolUnavailable}';
+    return 'registeredBackends=$regs, devices=$devices';
   }
 
   Pointer<ggml_backend_dev_t>? _createPreferredDeviceList(GpuBackend backend) {
@@ -1742,11 +394,8 @@ class LlamaCppService {
       case GpuBackend.auto:
         return null;
       case GpuBackend.cpu:
-        final cpuDev = _backendRegistryOr<ggml_backend_dev_t>(
-          nullptr,
-          () => ggml_backend_dev_by_type(
-            ggml_backend_dev_type.GGML_BACKEND_DEVICE_TYPE_CPU,
-          ),
+        final cpuDev = lib.ggml_backend_dev_by_type(
+          ggml_backend_dev_type.GGML_BACKEND_DEVICE_TYPE_CPU,
         );
         if (cpuDev == nullptr) {
           return null;
@@ -1770,28 +419,19 @@ class LlamaCppService {
   List<ggml_backend_dev_t>? _devicesForBackendRegName(String regName) {
     final regNamePtr = regName.toNativeUtf8();
     try {
-      final reg = _backendRegistryOr<ggml_backend_reg_t>(
-        nullptr,
-        () => ggml_backend_reg_by_name(regNamePtr.cast()),
-      );
+      final reg = lib.ggml_backend_reg_by_name(regNamePtr.cast());
       if (reg == nullptr) {
         return null;
       }
 
-      final count = _backendRegistryOr<int>(
-        0,
-        () => ggml_backend_reg_dev_count(reg),
-      );
+      final count = lib.ggml_backend_reg_dev_count(reg);
       if (count <= 0) {
         return null;
       }
 
       final devices = <ggml_backend_dev_t>[];
       for (var i = 0; i < count; i++) {
-        final dev = _backendRegistryOr<ggml_backend_dev_t>(
-          nullptr,
-          () => ggml_backend_reg_dev_get(reg, i),
-        );
+        final dev = lib.ggml_backend_reg_dev_get(reg, i);
         if (dev != nullptr) {
           devices.add(dev);
         }
@@ -1804,6 +444,26 @@ class LlamaCppService {
       return devices;
     } finally {
       malloc.free(regNamePtr);
+    }
+  }
+
+  static bool _looksLikeGguf(File modelFile) {
+    try {
+      final header = modelFile.openSync(mode: FileMode.read);
+      try {
+        final magic = header.readSync(4);
+        if (magic.length < 4) {
+          return false;
+        }
+        return magic[0] == 0x47 &&
+            magic[1] == 0x47 &&
+            magic[2] == 0x55 &&
+            magic[3] == 0x46;
+      } finally {
+        header.closeSync();
+      }
+    } catch (_) {
+      return false;
     }
   }
 
@@ -1828,7 +488,7 @@ class LlamaCppService {
       final mmHandle = _modelToMtmd.remove(modelHandle);
       if (mmHandle != null) {
         final mmCtx = _mtmdContexts.remove(mmHandle);
-        if (mmCtx != null) _mtmdFree(mmCtx);
+        if (mmCtx != null) lib.mtmd_free(mmCtx);
       }
 
       model.dispose();
@@ -1855,13 +515,13 @@ class LlamaCppService {
       throw Exception("Invalid model handle");
     }
 
-    final ctxParams = llama_context_default_params();
+    final ctxParams = lib.llama_context_default_params();
     int nCtx = params.contextSize;
     if (nCtx <= 0) {
-      nCtx = llama_model_n_ctx_train(model.pointer);
+      nCtx = lib.llama_model_n_ctx_train(model.pointer);
     }
     final resolvedBatchSizes = resolveContextBatchSizes(params, nCtx);
-    final maxSeqLimit = llama_max_parallel_sequences();
+    final maxSeqLimit = lib.llama_max_parallel_sequences();
     final resolvedMaxParallelSequences = math.max(
       1,
       math.min(params.maxParallelSequences, maxSeqLimit),
@@ -1890,20 +550,20 @@ class LlamaCppService {
           llama_flash_attn_type.LLAMA_FLASH_ATTN_TYPE_DISABLED.value;
     }
 
-    final ctxPtr = llama_init_from_model(model.pointer, ctxParams);
+    final ctxPtr = lib.llama_init_from_model(model.pointer, ctxParams);
     if (ctxPtr == nullptr) {
       throw Exception("Failed to create context");
     }
 
     final handle = _getHandle();
-    _contexts[handle] = _LlamaContextWrapper(ctxPtr, model);
+    _contexts[handle] = _LlamaContextWrapper(ctxPtr, model, lib);
     _contextToModel[handle] = modelHandle;
     _activeLoras[handle] = {};
     _contextParams[handle] = ctxParams;
-    _samplers[handle] = llama_sampler_chain_init(
-      llama_sampler_chain_default_params(),
+    _samplers[handle] = lib.llama_sampler_chain_init(
+      lib.llama_sampler_chain_default_params(),
     );
-    _batches[handle] = llama_batch_init(resolvedBatchSizes.batchSize, 0, 1);
+    _batches[handle] = lib.llama_batch_init(resolvedBatchSizes.batchSize, 0, 1);
 
     return handle;
   }
@@ -1918,9 +578,9 @@ class LlamaCppService {
     _activeLoras.remove(handle);
     _contextParams.remove(handle);
     final sampler = _samplers.remove(handle);
-    if (sampler != null && sampler != nullptr) llama_sampler_free(sampler);
+    if (sampler != null && sampler != nullptr) lib.llama_sampler_free(sampler);
     final batch = _batches.remove(handle);
-    if (batch != null) llama_batch_free(batch);
+    if (batch != null) lib.llama_batch_free(batch);
     _contexts.remove(handle)?.dispose();
   }
 
@@ -1941,7 +601,7 @@ class LlamaCppService {
     final modelHandle = _contextToModel[contextHandle]!;
     final model = _models[modelHandle]!;
     final modelParams = _contextParams[contextHandle]!;
-    final vocab = llama_model_get_vocab(model.pointer);
+    final vocab = lib.llama_model_get_vocab(model.pointer);
     final hasMediaParts =
         parts?.any((p) => p is LlamaImageContent || p is LlamaAudioContent) ??
         false;
@@ -1954,7 +614,7 @@ class LlamaCppService {
     );
 
     // 2. Prepare Resources
-    final nCtx = llama_n_ctx(ctx.pointer);
+    final nCtx = lib.llama_n_ctx(ctx.pointer);
     final batch = _batches[contextHandle]!;
     final tokensPtr = malloc<Int32>(nCtx);
     final pieceBuf = malloc<Uint8>(256);
@@ -2021,7 +681,7 @@ class LlamaCppService {
         effectiveStopSequences,
       );
 
-      llama_sampler_free(sampler);
+      lib.llama_sampler_free(sampler);
     } finally {
       malloc.free(tokensPtr);
       malloc.free(pieceBuf);
@@ -2053,8 +713,8 @@ class LlamaCppService {
       throw Exception('Missing context parameters');
     }
 
-    final hasEncoder = llama_model_has_encoder(model.pointer);
-    final hasDecoder = llama_model_has_decoder(model.pointer);
+    final hasEncoder = lib.llama_model_has_encoder(model.pointer);
+    final hasDecoder = lib.llama_model_has_decoder(model.pointer);
     if (hasEncoder && hasDecoder) {
       throw Exception(
         'Embedding extraction for encoder-decoder models is not supported',
@@ -2062,8 +722,8 @@ class LlamaCppService {
     }
     final useEncoderPath = hasEncoder && !hasDecoder;
 
-    final vocab = llama_model_get_vocab(model.pointer);
-    final nSeqCtx = llama_n_ctx_seq(ctx.pointer);
+    final vocab = lib.llama_model_get_vocab(model.pointer);
+    final nSeqCtx = lib.llama_n_ctx_seq(ctx.pointer);
     final tokens = _tokenizeEmbeddingText(vocab, text, nSeqCtx);
     final configuredBatchSize = contextParams.n_batch > 0
         ? contextParams.n_batch
@@ -2072,14 +732,14 @@ class LlamaCppService {
       1,
       math.min(configuredBatchSize, tokens.length),
     );
-    final batch = llama_batch_init(batchCapacity, 0, 1);
+    final batch = lib.llama_batch_init(batchCapacity, 0, 1);
     final embeddingSize = _resolveEmbeddingDimension(model.pointer);
 
     try {
-      llama_synchronize(ctx.pointer);
+      lib.llama_synchronize(ctx.pointer);
       _clearContextMemory(ctx.pointer, strict: false);
       ctx.cachedPromptTokens = null;
-      llama_set_embeddings(ctx.pointer, true);
+      lib.llama_set_embeddings(ctx.pointer, true);
 
       var decodedTokens = 0;
       while (decodedTokens < tokens.length) {
@@ -2097,8 +757,8 @@ class LlamaCppService {
         }
 
         final status = useEncoderPath
-            ? llama_encode(ctx.pointer, batch)
-            : llama_decode(ctx.pointer, batch);
+            ? lib.llama_encode(ctx.pointer, batch)
+            : lib.llama_decode(ctx.pointer, batch);
         if (status != 0) {
           throw Exception('Embedding forward pass failed');
         }
@@ -2106,20 +766,20 @@ class LlamaCppService {
         decodedTokens += chunkTokenCount;
       }
 
-      final poolingType = llama_pooling_type$1(ctx.pointer);
+      final poolingType = lib.llama_pooling_type$1(ctx.pointer);
       Pointer<Float> embeddingPtr;
       if (poolingType == llama_pooling_type.LLAMA_POOLING_TYPE_NONE) {
-        embeddingPtr = llama_get_embeddings_ith(
+        embeddingPtr = lib.llama_get_embeddings_ith(
           ctx.pointer,
           batch.n_tokens - 1,
         );
         if (embeddingPtr == nullptr) {
-          embeddingPtr = llama_get_embeddings(ctx.pointer);
+          embeddingPtr = lib.llama_get_embeddings(ctx.pointer);
         }
       } else {
-        embeddingPtr = llama_get_embeddings_seq(ctx.pointer, 0);
+        embeddingPtr = lib.llama_get_embeddings_seq(ctx.pointer, 0);
         if (embeddingPtr == nullptr) {
-          embeddingPtr = llama_get_embeddings(ctx.pointer);
+          embeddingPtr = lib.llama_get_embeddings(ctx.pointer);
         }
       }
 
@@ -2138,8 +798,8 @@ class LlamaCppService {
 
       return _normalizeEmbeddingVector(vector);
     } finally {
-      llama_set_embeddings(ctx.pointer, false);
-      llama_batch_free(batch);
+      lib.llama_set_embeddings(ctx.pointer, false);
+      lib.llama_batch_free(batch);
     }
   }
 
@@ -2173,8 +833,8 @@ class LlamaCppService {
       throw Exception('Missing context parameters');
     }
 
-    final hasEncoder = llama_model_has_encoder(model.pointer);
-    final hasDecoder = llama_model_has_decoder(model.pointer);
+    final hasEncoder = lib.llama_model_has_encoder(model.pointer);
+    final hasDecoder = lib.llama_model_has_decoder(model.pointer);
     if (hasEncoder && hasDecoder) {
       throw Exception(
         'Embedding extraction for encoder-decoder models is not supported',
@@ -2182,8 +842,8 @@ class LlamaCppService {
     }
     final useEncoderPath = hasEncoder && !hasDecoder;
 
-    final poolingType = llama_pooling_type$1(ctx.pointer);
-    final maxParallelSequences = llama_n_seq_max(ctx.pointer);
+    final poolingType = lib.llama_pooling_type$1(ctx.pointer);
+    final maxParallelSequences = lib.llama_n_seq_max(ctx.pointer);
     if (poolingType == llama_pooling_type.LLAMA_POOLING_TYPE_NONE ||
         maxParallelSequences <= 1) {
       final fallbackVectors = <List<double>>[];
@@ -2193,11 +853,11 @@ class LlamaCppService {
       return fallbackVectors;
     }
 
-    final vocab = llama_model_get_vocab(model.pointer);
-    final nSeqCtx = llama_n_ctx_seq(ctx.pointer);
+    final vocab = lib.llama_model_get_vocab(model.pointer);
+    final nSeqCtx = lib.llama_n_ctx_seq(ctx.pointer);
     final configuredBatchSize = contextParams.n_batch > 0
         ? contextParams.n_batch
-        : llama_n_ctx(ctx.pointer);
+        : lib.llama_n_ctx(ctx.pointer);
     final batchCapacity = math.max(1, configuredBatchSize);
     final embeddingSize = _resolveEmbeddingDimension(model.pointer);
 
@@ -2252,12 +912,12 @@ class LlamaCppService {
       }
 
       final groupSize = index - groupStart;
-      final batch = llama_batch_init(groupTokenCount, 0, groupSize);
+      final batch = lib.llama_batch_init(groupTokenCount, 0, groupSize);
       try {
-        llama_synchronize(ctx.pointer);
+        lib.llama_synchronize(ctx.pointer);
         _clearContextMemory(ctx.pointer, strict: false);
         ctx.cachedPromptTokens = null;
-        llama_set_embeddings(ctx.pointer, true);
+        lib.llama_set_embeddings(ctx.pointer, true);
 
         batch.n_tokens = groupTokenCount;
 
@@ -2275,16 +935,19 @@ class LlamaCppService {
         }
 
         final status = useEncoderPath
-            ? llama_encode(ctx.pointer, batch)
-            : llama_decode(ctx.pointer, batch);
+            ? lib.llama_encode(ctx.pointer, batch)
+            : lib.llama_decode(ctx.pointer, batch);
         if (status != 0) {
           throw Exception('Batch embedding forward pass failed');
         }
 
         for (int sequence = 0; sequence < groupSize; sequence++) {
-          var embeddingPtr = llama_get_embeddings_seq(ctx.pointer, sequence);
+          var embeddingPtr = lib.llama_get_embeddings_seq(
+            ctx.pointer,
+            sequence,
+          );
           if (embeddingPtr == nullptr && groupSize == 1) {
-            embeddingPtr = llama_get_embeddings(ctx.pointer);
+            embeddingPtr = lib.llama_get_embeddings(ctx.pointer);
           }
           if (embeddingPtr == nullptr) {
             throw Exception('Batch embedding output is unavailable');
@@ -2299,8 +962,8 @@ class LlamaCppService {
               : vector;
         }
       } finally {
-        llama_set_embeddings(ctx.pointer, false);
-        llama_batch_free(batch);
+        lib.llama_set_embeddings(ctx.pointer, false);
+        lib.llama_batch_free(batch);
       }
     }
 
@@ -2315,7 +978,7 @@ class LlamaCppService {
     final shouldAddSpecial = !_promptStartsWithBosToken(vocab, text);
     final textPtr = text.toNativeUtf8();
 
-    final requiredTokenCount = -llama_tokenize(
+    final requiredTokenCount = -lib.llama_tokenize(
       vocab,
       textPtr.cast(),
       textPtr.length,
@@ -2332,7 +995,7 @@ class LlamaCppService {
 
     final tokensPtr = malloc<Int32>(requiredTokenCount);
     try {
-      final actualTokenCount = llama_tokenize(
+      final actualTokenCount = lib.llama_tokenize(
         vocab,
         textPtr.cast(),
         textPtr.length,
@@ -2353,9 +1016,9 @@ class LlamaCppService {
   }
 
   int _resolveEmbeddingDimension(Pointer<llama_model> modelPointer) {
-    var embeddingSize = llama_model_n_embd_out(modelPointer);
+    var embeddingSize = lib.llama_model_n_embd_out(modelPointer);
     if (embeddingSize <= 0) {
-      embeddingSize = llama_model_n_embd(modelPointer);
+      embeddingSize = lib.llama_model_n_embd(modelPointer);
     }
     if (embeddingSize <= 0) {
       throw Exception('Failed to resolve embedding dimension');
@@ -2387,7 +1050,7 @@ class LlamaCppService {
     _LlamaContextWrapper ctx, {
     required bool clearMemory,
   }) {
-    llama_synchronize(ctx.pointer);
+    lib.llama_synchronize(ctx.pointer);
 
     if (clearMemory) {
       _clearContextMemory(ctx.pointer);
@@ -2402,7 +1065,7 @@ class LlamaCppService {
     Pointer<llama_context> contextPointer, {
     bool strict = true,
   }) {
-    final memory = llama_get_memory(contextPointer);
+    final memory = lib.llama_get_memory(contextPointer);
     if (memory == nullptr) {
       if (strict) {
         throw Exception("Failed to reset context memory");
@@ -2410,7 +1073,7 @@ class LlamaCppService {
       return;
     }
 
-    llama_memory_clear(memory, true);
+    lib.llama_memory_clear(memory, true);
   }
 
   /// Helper: Ingests the prompt (text or multimodal) and returns initial token count.
@@ -2468,7 +1131,7 @@ class LlamaCppService {
   ) {
     int initialTokens = 0;
     final bitmaps = malloc<Pointer<mtmd_bitmap>>(mediaParts.length);
-    final chunks = _mtmdInputChunksInit();
+    final chunks = lib.mtmd_input_chunks_init();
 
     try {
       for (int i = 0; i < mediaParts.length; i++) {
@@ -2477,12 +1140,15 @@ class LlamaCppService {
         if (p is LlamaImageContent) {
           if (p.path != null) {
             final pathPtr = p.path!.toNativeUtf8();
-            bitmaps[i] = _mtmdHelperBitmapInitFromFile(mmCtx, pathPtr.cast());
+            bitmaps[i] = lib.mtmd_helper_bitmap_init_from_file(
+              mmCtx,
+              pathPtr.cast(),
+            );
             malloc.free(pathPtr);
           } else if (p.bytes != null) {
             final dataPtr = malloc<Uint8>(p.bytes!.length);
             dataPtr.asTypedList(p.bytes!.length).setAll(0, p.bytes!);
-            bitmaps[i] = _mtmdHelperBitmapInitFromBuf(
+            bitmaps[i] = lib.mtmd_helper_bitmap_init_from_buf(
               mmCtx,
               dataPtr.cast(),
               p.bytes!.length,
@@ -2492,12 +1158,15 @@ class LlamaCppService {
         } else if (p is LlamaAudioContent) {
           if (p.path != null) {
             final pathPtr = p.path!.toNativeUtf8();
-            bitmaps[i] = _mtmdHelperBitmapInitFromFile(mmCtx, pathPtr.cast());
+            bitmaps[i] = lib.mtmd_helper_bitmap_init_from_file(
+              mmCtx,
+              pathPtr.cast(),
+            );
             malloc.free(pathPtr);
           } else if (p.bytes != null) {
             final dataPtr = malloc<Uint8>(p.bytes!.length);
             dataPtr.asTypedList(p.bytes!.length).setAll(0, p.bytes!);
-            bitmaps[i] = _mtmdHelperBitmapInitFromBuf(
+            bitmaps[i] = lib.mtmd_helper_bitmap_init_from_buf(
               mmCtx,
               dataPtr.cast(),
               p.bytes!.length,
@@ -2506,7 +1175,7 @@ class LlamaCppService {
           } else if (p.samples != null) {
             final dataPtr = malloc<Float>(p.samples!.length);
             dataPtr.asTypedList(p.samples!.length).setAll(0, p.samples!);
-            bitmaps[i] = _mtmdBitmapInitFromAudio(
+            bitmaps[i] = lib.mtmd_bitmap_init_from_audio(
               p.samples!.length,
               dataPtr.cast(),
             );
@@ -2527,15 +1196,15 @@ class LlamaCppService {
       final promptPtr = normalizedPrompt.toNativeUtf8();
       inputText.ref.text = promptPtr.cast();
 
-      final bos = llama_vocab_bos(vocab);
-      final eos = llama_vocab_eos(vocab);
+      final bos = lib.llama_vocab_bos(vocab);
+      final eos = lib.llama_vocab_eos(vocab);
       final shouldAddSpecial =
           (bos != eos && bos != -1) &&
           !_promptStartsWithBosToken(vocab, normalizedPrompt);
       inputText.ref.add_special = shouldAddSpecial;
       inputText.ref.parse_special = true;
 
-      final res = _mtmdTokenize(
+      final res = lib.mtmd_tokenize(
         mmCtx,
         chunks,
         inputText,
@@ -2545,7 +1214,7 @@ class LlamaCppService {
 
       if (res == 0) {
         final newPast = malloc<llama_pos>();
-        if (_mtmdHelperEvalChunks(
+        if (lib.mtmd_helper_eval_chunks(
               mmCtx,
               ctx.pointer,
               chunks,
@@ -2567,17 +1236,17 @@ class LlamaCppService {
       malloc.free(inputText);
     } finally {
       for (int i = 0; i < mediaParts.length; i++) {
-        if (bitmaps[i] != nullptr) _mtmdBitmapFree(bitmaps[i]);
+        if (bitmaps[i] != nullptr) lib.mtmd_bitmap_free(bitmaps[i]);
       }
       malloc.free(bitmaps);
-      _mtmdInputChunksFree(chunks);
+      lib.mtmd_input_chunks_free(chunks);
     }
     ctx.cachedPromptTokens = null;
     return initialTokens;
   }
 
   String _normalizeMtmdPromptMarkers(String prompt, int mediaPartCount) {
-    final markerPtr = _mtmdDefaultMarker();
+    final markerPtr = lib.mtmd_default_marker();
     final marker = markerPtr == nullptr
         ? '<__media__>'
         : markerPtr.cast<Utf8>().toDartString();
@@ -2638,12 +1307,12 @@ class LlamaCppService {
   }
 
   bool _promptStartsWithBosToken(Pointer<llama_vocab> vocab, String prompt) {
-    final bos = llama_vocab_bos(vocab);
+    final bos = lib.llama_vocab_bos(vocab);
     if (bos < 0) {
       return false;
     }
 
-    final bosPtr = llama_token_get_text(vocab, bos);
+    final bosPtr = lib.llama_token_get_text(vocab, bos);
     if (bosPtr == nullptr) {
       return false;
     }
@@ -2668,7 +1337,7 @@ class LlamaCppService {
   }) {
     final promptPtr = prompt.toNativeUtf8();
     final shouldAddSpecial = !_promptStartsWithBosToken(vocab, prompt);
-    final nTokens = llama_tokenize(
+    final nTokens = lib.llama_tokenize(
       vocab,
       promptPtr.cast(),
       promptPtr.length,
@@ -2719,7 +1388,7 @@ class LlamaCppService {
       );
     }
 
-    final memory = llama_get_memory(ctx.pointer);
+    final memory = lib.llama_get_memory(ctx.pointer);
     if (memory == nullptr) {
       return _decodeAndCacheFullPrompt(
         batch,
@@ -2732,9 +1401,14 @@ class LlamaCppService {
 
     final decodeStart = reusedPrefix;
 
-    final maxSeqPos = llama_memory_seq_pos_max(memory, 0);
+    final maxSeqPos = lib.llama_memory_seq_pos_max(memory, 0);
     final removeTo = maxSeqPos >= decodeStart ? maxSeqPos + 1 : decodeStart;
-    final removedTail = llama_memory_seq_rm(memory, 0, decodeStart, removeTo);
+    final removedTail = lib.llama_memory_seq_rm(
+      memory,
+      0,
+      decodeStart,
+      removeTo,
+    );
     if (!removedTail) {
       return _decodeAndCacheFullPrompt(
         batch,
@@ -2823,7 +1497,7 @@ class LlamaCppService {
         batch.logits[i] = isLastTokenInPrompt ? 1 : 0;
       }
 
-      if (llama_decode(ctx.pointer, batch) != 0) {
+      if (lib.llama_decode(ctx.pointer, batch) != 0) {
         throw Exception("Initial decode failed");
       }
 
@@ -2856,20 +1530,20 @@ class LlamaCppService {
     int initialTokens,
     Pointer<Int32> tokensPtr,
   ) {
-    final sampler = llama_sampler_chain_init(
-      llama_sampler_chain_default_params(),
+    final sampler = lib.llama_sampler_chain_init(
+      lib.llama_sampler_chain_default_params(),
     );
 
-    llama_sampler_chain_add(
+    lib.llama_sampler_chain_add(
       sampler,
-      llama_sampler_init_penalties(64, params.penalty, 0.0, 0.0),
+      lib.llama_sampler_init_penalties(64, params.penalty, 0.0, 0.0),
     );
 
     if (grammarPtr != nullptr) {
       if (params.grammarLazy && lazyGrammarConfig != null) {
-        llama_sampler_chain_add(
+        lib.llama_sampler_chain_add(
           sampler,
-          llama_sampler_init_grammar_lazy_patterns(
+          lib.llama_sampler_init_grammar_lazy_patterns(
             vocab,
             grammarPtr.cast(),
             rootPtr.cast(),
@@ -2880,33 +1554,46 @@ class LlamaCppService {
           ),
         );
       } else {
-        llama_sampler_chain_add(
+        lib.llama_sampler_chain_add(
           sampler,
-          llama_sampler_init_grammar(vocab, grammarPtr.cast(), rootPtr.cast()),
+          lib.llama_sampler_init_grammar(
+            vocab,
+            grammarPtr.cast(),
+            rootPtr.cast(),
+          ),
         );
       }
     }
 
-    llama_sampler_chain_add(sampler, llama_sampler_init_top_k(params.topK));
-    llama_sampler_chain_add(sampler, llama_sampler_init_top_p(params.topP, 1));
+    lib.llama_sampler_chain_add(
+      sampler,
+      lib.llama_sampler_init_top_k(params.topK),
+    );
+    lib.llama_sampler_chain_add(
+      sampler,
+      lib.llama_sampler_init_top_p(params.topP, 1),
+    );
     if (params.minP > 0) {
-      llama_sampler_chain_add(
+      lib.llama_sampler_chain_add(
         sampler,
-        llama_sampler_init_min_p(params.minP, 1),
+        lib.llama_sampler_init_min_p(params.minP, 1),
       );
     }
-    llama_sampler_chain_add(sampler, llama_sampler_init_temp(params.temp));
+    lib.llama_sampler_chain_add(
+      sampler,
+      lib.llama_sampler_init_temp(params.temp),
+    );
 
     if (params.temp <= 0) {
-      llama_sampler_chain_add(sampler, llama_sampler_init_greedy());
+      lib.llama_sampler_chain_add(sampler, lib.llama_sampler_init_greedy());
     } else {
       final seed = params.seed ?? DateTime.now().millisecondsSinceEpoch;
-      llama_sampler_chain_add(sampler, llama_sampler_init_dist(seed));
+      lib.llama_sampler_chain_add(sampler, lib.llama_sampler_init_dist(seed));
     }
 
     if (grammarPtr == nullptr && tokensPtr != nullptr && initialTokens > 0) {
       for (int i = 0; i < initialTokens; i++) {
-        llama_sampler_accept(sampler, tokensPtr[i]);
+        lib.llama_sampler_accept(sampler, tokensPtr[i]);
       }
     }
 
@@ -2936,10 +1623,10 @@ class LlamaCppService {
       if (cancelToken.value == 1) break;
       if (currentPos >= nCtx) break;
 
-      final selectedToken = llama_sampler_sample(sampler, ctx.pointer, -1);
-      if (llama_vocab_is_eog(vocab, selectedToken)) break;
+      final selectedToken = lib.llama_sampler_sample(sampler, ctx.pointer, -1);
+      if (lib.llama_vocab_is_eog(vocab, selectedToken)) break;
 
-      final n = llama_token_to_piece(
+      final n = lib.llama_token_to_piece(
         vocab,
         selectedToken,
         pieceBuf.cast(),
@@ -2969,7 +1656,7 @@ class LlamaCppService {
       batch.seq_id[0][0] = 0;
       batch.logits[0] = 1;
 
-      if (llama_decode(ctx.pointer, batch) != 0) break;
+      if (lib.llama_decode(ctx.pointer, batch) != 0) break;
     }
   }
 
@@ -3054,7 +1741,7 @@ class LlamaCppService {
 
       final textPtr = tokenText.toNativeUtf8();
       try {
-        final required = -llama_tokenize(
+        final required = -lib.llama_tokenize(
           vocab,
           textPtr.cast(),
           textPtr.length,
@@ -3070,7 +1757,7 @@ class LlamaCppService {
 
         final tokenIds = malloc<Int32>(required);
         try {
-          final actual = llama_tokenize(
+          final actual = lib.llama_tokenize(
             vocab,
             textPtr.cast(),
             textPtr.length,
@@ -3127,11 +1814,11 @@ class LlamaCppService {
   List<int> tokenize(int modelHandle, String text, bool addSpecial) {
     final model = _models[modelHandle];
     if (model == null) return [];
-    final vocab = llama_model_get_vocab(model.pointer);
+    final vocab = lib.llama_model_get_vocab(model.pointer);
     final textPtr = text.toNativeUtf8();
     final shouldAddSpecial =
         addSpecial && !_promptStartsWithBosToken(vocab, text);
-    final n = -llama_tokenize(
+    final n = -lib.llama_tokenize(
       vocab,
       textPtr.cast(),
       textPtr.length,
@@ -3141,7 +1828,7 @@ class LlamaCppService {
       true,
     );
     final tokensPtr = malloc<Int32>(n);
-    final actual = llama_tokenize(
+    final actual = lib.llama_tokenize(
       vocab,
       textPtr.cast(),
       textPtr.length,
@@ -3160,11 +1847,18 @@ class LlamaCppService {
   String detokenize(int modelHandle, List<int> tokens, bool special) {
     final model = _models[modelHandle];
     if (model == null) return "";
-    final vocab = llama_model_get_vocab(model.pointer);
+    final vocab = lib.llama_model_get_vocab(model.pointer);
     final buffer = malloc<Int8>(256);
     final bytes = <int>[];
     for (final t in tokens) {
-      final n = llama_token_to_piece(vocab, t, buffer.cast(), 256, 0, special);
+      final n = lib.llama_token_to_piece(
+        vocab,
+        t,
+        buffer.cast(),
+        256,
+        0,
+        special,
+      );
       if (n > 0) bytes.addAll(buffer.asTypedList(n));
     }
     malloc.free(buffer);
@@ -3178,10 +1872,10 @@ class LlamaCppService {
     final metadata = <String, String>{};
     final keyBuf = malloc<Int8>(1024);
     final valBuf = malloc<Int8>(1024 * 64);
-    final n = llama_model_meta_count(model.pointer);
+    final n = lib.llama_model_meta_count(model.pointer);
     for (int i = 0; i < n; i++) {
-      llama_model_meta_key_by_index(model.pointer, i, keyBuf.cast(), 1024);
-      llama_model_meta_val_str_by_index(
+      lib.llama_model_meta_key_by_index(model.pointer, i, keyBuf.cast(), 1024);
+      lib.llama_model_meta_val_str_by_index(
         model.pointer,
         i,
         valBuf.cast(),
@@ -3218,7 +1912,7 @@ class LlamaCppService {
         var adapter = modelAdapters[path];
         if (adapter == null) {
           final pathPtr = path.toNativeUtf8();
-          final adapterPtr = llama_adapter_lora_init(
+          final adapterPtr = lib.llama_adapter_lora_init(
             _models[modelHandle]!.pointer,
             pathPtr.cast(),
           );
@@ -3226,7 +1920,7 @@ class LlamaCppService {
           if (adapterPtr == nullptr) {
             throw Exception("Failed to load LoRA at $path");
           }
-          adapter = _LlamaLoraWrapper(adapterPtr);
+          adapter = _LlamaLoraWrapper(adapterPtr, lib);
           modelAdapters[path] = adapter;
         }
         activeLoras[path] = scale;
@@ -3257,7 +1951,7 @@ class LlamaCppService {
     Map<String, double> activeLoras,
   ) {
     if (activeLoras.isEmpty) {
-      final result = llama_set_adapters_lora(context, nullptr, 0, nullptr);
+      final result = lib.llama_set_adapters_lora(context, nullptr, 0, nullptr);
       if (result != 0) {
         throw Exception('Failed to clear LoRA adapters (code: $result)');
       }
@@ -3283,7 +1977,7 @@ class LlamaCppService {
         scalesPointer[i] = entry.value;
       }
 
-      final result = llama_set_adapters_lora(
+      final result = lib.llama_set_adapters_lora(
         context,
         adapterPointers,
         activeEntries.length,
@@ -3317,29 +2011,8 @@ class LlamaCppService {
   /// settings/selector UIs.
   List<String> getAvailableBackendInfo() {
     final available = <String>{};
-    final backendModuleDirectory = _backendModuleDirectory;
 
-    if (backendModuleDirectory != null) {
-      const backendCandidates = <String>[
-        'cpu',
-        'vulkan',
-        'opencl',
-        'metal',
-        'cuda',
-        'hip',
-        'blas',
-      ];
-
-      for (final backend in backendCandidates) {
-        if (_isBackendModuleBundled(backend)) {
-          available.add(_backendDisplayName(backend));
-        }
-      }
-    }
-
-    if (available.isEmpty) {
-      available.addAll(getBackendInfo());
-    }
+    available.addAll(getBackendInfo());
 
     if (available.isEmpty) {
       available.add(_backendDisplayName('cpu'));
@@ -3380,32 +2053,20 @@ class LlamaCppService {
 
   /// Returns information about currently initialized backend devices.
   List<String> getBackendInfo() {
-    final count = _backendRegistryOr<int>(0, ggml_backend_dev_count);
+    final count = lib.ggml_backend_dev_count();
     final devices = <String>{};
     for (var i = 0; i < count; i++) {
-      final dev = _backendRegistryOr<ggml_backend_dev_t>(
-        nullptr,
-        () => ggml_backend_dev_get(i),
-      );
+      final dev = lib.ggml_backend_dev_get(i);
       if (dev == nullptr) continue;
 
-      final devNamePtr = _backendRegistryOr<Pointer<Char>>(
-        nullptr,
-        () => ggml_backend_dev_name(dev),
-      );
+      final devNamePtr = lib.ggml_backend_dev_name(dev);
       if (devNamePtr == nullptr) continue;
       final devName = devNamePtr.cast<Utf8>().toDartString();
 
       String label = devName;
-      final reg = _backendRegistryOr<ggml_backend_reg_t>(
-        nullptr,
-        () => ggml_backend_dev_backend_reg(dev),
-      );
+      final reg = lib.ggml_backend_dev_backend_reg(dev);
       if (reg != nullptr) {
-        final regNamePtr = _backendRegistryOr<Pointer<Char>>(
-          nullptr,
-          () => ggml_backend_reg_name(reg),
-        );
+        final regNamePtr = lib.ggml_backend_reg_name(reg);
         if (regNamePtr != nullptr) {
           final regName = regNamePtr.cast<Utf8>().toDartString();
           if (regName.toLowerCase() == devName.toLowerCase()) {
@@ -3421,17 +2082,7 @@ class LlamaCppService {
     if (devices.isNotEmpty) {
       return devices.toList(growable: false);
     }
-
-    // Fallback when device-enumeration symbols are unavailable: surface loaded
-    // backend modules so UI can still present selectable backends.
-    final moduleBackends =
-        _loadedBackendModules
-            .map(_backendDisplayName)
-            .where((name) => name.isNotEmpty)
-            .toSet()
-            .toList(growable: false)
-          ..sort();
-    return moduleBackends;
+    return [];
   }
 
   static String _backendDisplayName(String backend) {
@@ -3457,7 +2108,7 @@ class LlamaCppService {
 
   /// Returns whether GPU offloading is supported.
   bool getGpuSupport() {
-    return llama_supports_gpu_offload();
+    return lib.llama_supports_gpu_offload();
   }
 
   /// Disposes of all resources managed by the service.
@@ -3475,7 +2126,7 @@ class LlamaCppService {
     _activeBackendName = _backendDisplayName('cpu');
     _activeResolvedGpuLayers = 0;
     for (final m in _mtmdContexts.values) {
-      _mtmdFree(m);
+      lib.mtmd_free(m);
     }
     _mtmdContexts.clear();
     _modelToMtmd.clear();
@@ -3494,9 +2145,13 @@ class LlamaCppService {
     final mmProjPathPtr = mmProjPath.toNativeUtf8();
     Pointer<mtmd_context> mmCtx = nullptr;
     try {
-      final ctxParams = _mtmdContextParamsDefault();
+      final ctxParams = lib.mtmd_context_params_default();
       ctxParams.use_gpu = _modelToMtmdUseGpu[modelHandle] ?? true;
-      mmCtx = _mtmdInitFromFile(mmProjPathPtr.cast(), model.pointer, ctxParams);
+      mmCtx = lib.mtmd_init_from_file(
+        mmProjPathPtr.cast(),
+        model.pointer,
+        ctxParams,
+      );
     } finally {
       malloc.free(mmProjPathPtr);
     }
@@ -3515,310 +2170,9 @@ class LlamaCppService {
   void freeMultimodalContext(int mmContextHandle) {
     final mmCtx = _mtmdContexts.remove(mmContextHandle);
     if (mmCtx != null) {
-      _mtmdFree(mmCtx);
+      lib.mtmd_free(mmCtx);
       _modelToMtmd.removeWhere((k, v) => v == mmContextHandle);
     }
-  }
-
-  Pointer<Char> _mtmdDefaultMarker() {
-    if (!_mtmdPrimarySymbolsUnavailable) {
-      try {
-        return mtmd_default_marker();
-      } on ArgumentError {
-        _mtmdPrimarySymbolsUnavailable = true;
-      }
-    }
-    final fallback = _resolveMtmdFallbackApi();
-    return fallback?.defaultMarker() ?? nullptr;
-  }
-
-  mtmd_context_params _mtmdContextParamsDefault() {
-    if (!_mtmdPrimarySymbolsUnavailable) {
-      try {
-        return mtmd_context_params_default();
-      } on ArgumentError {
-        _mtmdPrimarySymbolsUnavailable = true;
-      }
-    }
-    final fallback = _resolveMtmdFallbackApi();
-    if (fallback == null) {
-      throw Exception(_mtmdUnavailableMessage('mtmd_context_params_default'));
-    }
-    return fallback.contextParamsDefault();
-  }
-
-  Pointer<mtmd_context> _mtmdInitFromFile(
-    Pointer<Char> mmProjPath,
-    Pointer<llama_model> model,
-    mtmd_context_params ctxParams,
-  ) {
-    if (!_mtmdPrimarySymbolsUnavailable) {
-      try {
-        return mtmd_init_from_file(mmProjPath, model, ctxParams);
-      } on ArgumentError {
-        _mtmdPrimarySymbolsUnavailable = true;
-      }
-    }
-    final fallback = _resolveMtmdFallbackApi();
-    if (fallback == null) {
-      throw Exception(_mtmdUnavailableMessage('mtmd_init_from_file'));
-    }
-    return fallback.initFromFile(mmProjPath, model, ctxParams);
-  }
-
-  void _mtmdFree(Pointer<mtmd_context> ctx) {
-    if (!_mtmdPrimarySymbolsUnavailable) {
-      try {
-        mtmd_free(ctx);
-        return;
-      } on ArgumentError {
-        _mtmdPrimarySymbolsUnavailable = true;
-      }
-    }
-    final fallback = _resolveMtmdFallbackApi();
-    if (fallback == null) {
-      return;
-    }
-    fallback.free(ctx);
-  }
-
-  Pointer<mtmd_input_chunks> _mtmdInputChunksInit() {
-    if (!_mtmdPrimarySymbolsUnavailable) {
-      try {
-        return mtmd_input_chunks_init();
-      } on ArgumentError {
-        _mtmdPrimarySymbolsUnavailable = true;
-      }
-    }
-    final fallback = _resolveMtmdFallbackApi();
-    if (fallback == null) {
-      throw Exception(_mtmdUnavailableMessage('mtmd_input_chunks_init'));
-    }
-    return fallback.inputChunksInit();
-  }
-
-  void _mtmdInputChunksFree(Pointer<mtmd_input_chunks> chunks) {
-    if (!_mtmdPrimarySymbolsUnavailable) {
-      try {
-        mtmd_input_chunks_free(chunks);
-        return;
-      } on ArgumentError {
-        _mtmdPrimarySymbolsUnavailable = true;
-      }
-    }
-    final fallback = _resolveMtmdFallbackApi();
-    if (fallback == null) {
-      return;
-    }
-    fallback.inputChunksFree(chunks);
-  }
-
-  Pointer<mtmd_bitmap> _mtmdHelperBitmapInitFromFile(
-    Pointer<mtmd_context> ctx,
-    Pointer<Char> pathPtr,
-  ) {
-    if (!_mtmdPrimarySymbolsUnavailable) {
-      try {
-        return mtmd_helper_bitmap_init_from_file(ctx, pathPtr);
-      } on ArgumentError {
-        _mtmdPrimarySymbolsUnavailable = true;
-      }
-    }
-    final fallback = _resolveMtmdFallbackApi();
-    if (fallback == null) {
-      throw Exception(
-        _mtmdUnavailableMessage('mtmd_helper_bitmap_init_from_file'),
-      );
-    }
-    return fallback.helperBitmapInitFromFile(ctx, pathPtr);
-  }
-
-  Pointer<mtmd_bitmap> _mtmdHelperBitmapInitFromBuf(
-    Pointer<mtmd_context> ctx,
-    Pointer<UnsignedChar> data,
-    int size,
-  ) {
-    if (!_mtmdPrimarySymbolsUnavailable) {
-      try {
-        return mtmd_helper_bitmap_init_from_buf(ctx, data, size);
-      } on ArgumentError {
-        _mtmdPrimarySymbolsUnavailable = true;
-      }
-    }
-    final fallback = _resolveMtmdFallbackApi();
-    if (fallback == null) {
-      throw Exception(
-        _mtmdUnavailableMessage('mtmd_helper_bitmap_init_from_buf'),
-      );
-    }
-    return fallback.helperBitmapInitFromBuf(ctx, data, size);
-  }
-
-  Pointer<mtmd_bitmap> _mtmdBitmapInitFromAudio(int n, Pointer<Float> samples) {
-    if (!_mtmdPrimarySymbolsUnavailable) {
-      try {
-        return mtmd_bitmap_init_from_audio(n, samples);
-      } on ArgumentError {
-        _mtmdPrimarySymbolsUnavailable = true;
-      }
-    }
-    final fallback = _resolveMtmdFallbackApi();
-    if (fallback == null) {
-      throw Exception(_mtmdUnavailableMessage('mtmd_bitmap_init_from_audio'));
-    }
-    return fallback.bitmapInitFromAudio(n, samples);
-  }
-
-  void _mtmdBitmapFree(Pointer<mtmd_bitmap> bitmap) {
-    if (!_mtmdPrimarySymbolsUnavailable) {
-      try {
-        mtmd_bitmap_free(bitmap);
-        return;
-      } on ArgumentError {
-        _mtmdPrimarySymbolsUnavailable = true;
-      }
-    }
-    final fallback = _resolveMtmdFallbackApi();
-    if (fallback == null) {
-      return;
-    }
-    fallback.bitmapFree(bitmap);
-  }
-
-  int _mtmdTokenize(
-    Pointer<mtmd_context> ctx,
-    Pointer<mtmd_input_chunks> output,
-    Pointer<mtmd_input_text> text,
-    Pointer<Pointer<mtmd_bitmap>> bitmaps,
-    int nBitmaps,
-  ) {
-    if (!_mtmdPrimarySymbolsUnavailable) {
-      try {
-        return mtmd_tokenize(ctx, output, text, bitmaps, nBitmaps);
-      } on ArgumentError {
-        _mtmdPrimarySymbolsUnavailable = true;
-      }
-    }
-    final fallback = _resolveMtmdFallbackApi();
-    if (fallback == null) {
-      throw Exception(_mtmdUnavailableMessage('mtmd_tokenize'));
-    }
-    return fallback.tokenize(ctx, output, text, bitmaps, nBitmaps);
-  }
-
-  int _mtmdHelperEvalChunks(
-    Pointer<mtmd_context> ctx,
-    Pointer<llama_context> lctx,
-    Pointer<mtmd_input_chunks> chunks,
-    int nPast,
-    int seqId,
-    int nBatch,
-    bool logitsLast,
-    Pointer<llama_pos> newNPast,
-  ) {
-    if (!_mtmdPrimarySymbolsUnavailable) {
-      try {
-        return mtmd_helper_eval_chunks(
-          ctx,
-          lctx,
-          chunks,
-          nPast,
-          seqId,
-          nBatch,
-          logitsLast,
-          newNPast,
-        );
-      } on ArgumentError {
-        _mtmdPrimarySymbolsUnavailable = true;
-      }
-    }
-    final fallback = _resolveMtmdFallbackApi();
-    if (fallback == null) {
-      throw Exception(_mtmdUnavailableMessage('mtmd_helper_eval_chunks'));
-    }
-    return fallback.helperEvalChunks(
-      ctx,
-      lctx,
-      chunks,
-      nPast,
-      seqId,
-      nBatch,
-      logitsLast,
-      newNPast,
-    );
-  }
-
-  _MtmdApi? _resolveMtmdFallbackApi() {
-    if (_mtmdFallbackLookupAttempted) {
-      return _mtmdFallbackApi;
-    }
-    _mtmdFallbackLookupAttempted = true;
-
-    final fileNameCandidates = _mtmdLibraryCandidateFileNames();
-    final candidates = <String>{...fileNameCandidates};
-    final backendModuleDirectory = _backendModuleDirectory;
-    if (backendModuleDirectory != null) {
-      for (final fileName in fileNameCandidates) {
-        candidates.add(path.join(backendModuleDirectory, fileName));
-      }
-    }
-
-    DynamicLibrary? library;
-    for (final candidate in candidates) {
-      try {
-        library = DynamicLibrary.open(candidate);
-        break;
-      } catch (_) {
-        continue;
-      }
-    }
-    if (library == null) {
-      return null;
-    }
-
-    _mtmdFallbackApi = _MtmdApi.tryLoad(library);
-    return _mtmdFallbackApi;
-  }
-
-  List<String> _mtmdLibraryCandidateFileNames() {
-    final baseName = _mtmdLibraryFileName();
-    final candidates = <String>{baseName};
-    final backendModuleDirectory = _backendModuleDirectory;
-    if (backendModuleDirectory == null) {
-      return candidates.toList(growable: false);
-    }
-
-    final dynamicNames = _matchingLibraryNames(
-      backendModuleDirectory,
-      _mtmdLibraryPattern(),
-    );
-    candidates.addAll(dynamicNames);
-    return candidates.toList(growable: false);
-  }
-
-  static String _mtmdLibraryFileName() {
-    if (Platform.isWindows) {
-      return 'mtmd.dll';
-    }
-    if (Platform.isMacOS || Platform.isIOS) {
-      return 'libmtmd.dylib';
-    }
-    return 'libmtmd.so';
-  }
-
-  RegExp _mtmdLibraryPattern() {
-    if (Platform.isWindows) {
-      return RegExp(r'^mtmd(?:-[^.\\/]+)*\.dll$');
-    }
-    if (Platform.isMacOS || Platform.isIOS) {
-      return RegExp(r'^libmtmd(?:-[^.\\/]+)*\.dylib$');
-    }
-    return RegExp(r'^libmtmd(?:-[^.\\/]+)*\.so$');
-  }
-
-  String _mtmdUnavailableMessage(String symbol) {
-    return 'Multimodal support is unavailable in this native runtime bundle '
-        '(missing `$symbol` in both primary and mtmd libraries).';
   }
 
   // --- Helper Getters ---
@@ -3827,7 +2181,7 @@ class LlamaCppService {
   int getContextSize(int contextHandle) {
     final ctx = _contexts[contextHandle];
     if (ctx == null) return 0;
-    return llama_n_ctx(ctx.pointer);
+    return lib.llama_n_ctx(ctx.pointer);
   }
 
   /// Checks if a multimodal context exists.
@@ -3865,146 +2219,36 @@ class _LazyGrammarConfig {
   }
 }
 
-class _MtmdApi {
-  final _MtmdDefaultMarkerDart defaultMarker;
-  final _MtmdContextParamsDefaultDart contextParamsDefault;
-  final _MtmdInitFromFileDart initFromFile;
-  final _MtmdFreeDart free;
-  final _MtmdInputChunksInitDart inputChunksInit;
-  final _MtmdInputChunksFreeDart inputChunksFree;
-  final _MtmdHelperBitmapInitFromFileDart helperBitmapInitFromFile;
-  final _MtmdHelperBitmapInitFromBufDart helperBitmapInitFromBuf;
-  final _MtmdBitmapInitFromAudioDart bitmapInitFromAudio;
-  final _MtmdBitmapFreeDart bitmapFree;
-  final _MtmdTokenizeDart tokenize;
-  final _MtmdHelperEvalChunksDart helperEvalChunks;
-  final _MtmdLogSetDart? logSet;
-  final _MtmdLogSetDart? helperLogSet;
-
-  const _MtmdApi({
-    required this.defaultMarker,
-    required this.contextParamsDefault,
-    required this.initFromFile,
-    required this.free,
-    required this.inputChunksInit,
-    required this.inputChunksFree,
-    required this.helperBitmapInitFromFile,
-    required this.helperBitmapInitFromBuf,
-    required this.bitmapInitFromAudio,
-    required this.bitmapFree,
-    required this.tokenize,
-    required this.helperEvalChunks,
-    required this.logSet,
-    required this.helperLogSet,
-  });
-
-  static _MtmdApi? tryLoad(DynamicLibrary library) {
-    try {
-      _MtmdLogSetDart? logSet;
-      _MtmdLogSetDart? helperLogSet;
-      try {
-        logSet = library.lookupFunction<_MtmdLogSetNative, _MtmdLogSetDart>(
-          'mtmd_log_set',
-        );
-      } catch (_) {}
-      try {
-        helperLogSet = library
-            .lookupFunction<_MtmdLogSetNative, _MtmdLogSetDart>(
-              'mtmd_helper_log_set',
-            );
-      } catch (_) {}
-
-      return _MtmdApi(
-        defaultMarker: library
-            .lookupFunction<_MtmdDefaultMarkerNative, _MtmdDefaultMarkerDart>(
-              'mtmd_default_marker',
-            ),
-        contextParamsDefault: library
-            .lookupFunction<
-              _MtmdContextParamsDefaultNative,
-              _MtmdContextParamsDefaultDart
-            >('mtmd_context_params_default'),
-        initFromFile: library
-            .lookupFunction<_MtmdInitFromFileNative, _MtmdInitFromFileDart>(
-              'mtmd_init_from_file',
-            ),
-        free: library.lookupFunction<_MtmdFreeNative, _MtmdFreeDart>(
-          'mtmd_free',
-        ),
-        inputChunksInit: library
-            .lookupFunction<
-              _MtmdInputChunksInitNative,
-              _MtmdInputChunksInitDart
-            >('mtmd_input_chunks_init'),
-        inputChunksFree: library
-            .lookupFunction<
-              _MtmdInputChunksFreeNative,
-              _MtmdInputChunksFreeDart
-            >('mtmd_input_chunks_free'),
-        helperBitmapInitFromFile: library
-            .lookupFunction<
-              _MtmdHelperBitmapInitFromFileNative,
-              _MtmdHelperBitmapInitFromFileDart
-            >('mtmd_helper_bitmap_init_from_file'),
-        helperBitmapInitFromBuf: library
-            .lookupFunction<
-              _MtmdHelperBitmapInitFromBufNative,
-              _MtmdHelperBitmapInitFromBufDart
-            >('mtmd_helper_bitmap_init_from_buf'),
-        bitmapInitFromAudio: library
-            .lookupFunction<
-              _MtmdBitmapInitFromAudioNative,
-              _MtmdBitmapInitFromAudioDart
-            >('mtmd_bitmap_init_from_audio'),
-        bitmapFree: library
-            .lookupFunction<_MtmdBitmapFreeNative, _MtmdBitmapFreeDart>(
-              'mtmd_bitmap_free',
-            ),
-        tokenize: library
-            .lookupFunction<_MtmdTokenizeNative, _MtmdTokenizeDart>(
-              'mtmd_tokenize',
-            ),
-        helperEvalChunks: library
-            .lookupFunction<
-              _MtmdHelperEvalChunksNative,
-              _MtmdHelperEvalChunksDart
-            >('mtmd_helper_eval_chunks'),
-        logSet: logSet,
-        helperLogSet: helperLogSet,
-      );
-    } catch (_) {
-      return null;
-    }
-  }
-}
-
 // --- Native Wrappers ---
 
 class _LlamaLoraWrapper {
+  final llama_cpp lib;
   final Pointer<llama_adapter_lora> pointer;
-  _LlamaLoraWrapper(this.pointer);
+  _LlamaLoraWrapper(this.pointer, this.lib);
   void dispose() {
-    llama_adapter_lora_free(pointer);
+    lib.llama_adapter_lora_free(pointer);
   }
 }
 
 class _LlamaModelWrapper {
+  final llama_cpp lib;
   final Pointer<llama_model> pointer;
-  _LlamaModelWrapper(this.pointer);
+  _LlamaModelWrapper(this.pointer, this.lib);
   void dispose() {
-    llama_model_free(pointer);
+    lib.llama_model_free(pointer);
   }
 }
 
 class _LlamaContextWrapper {
+  final llama_cpp lib;
   final Pointer<llama_context> pointer;
   final _LlamaModelWrapper? _modelKeepAlive;
   List<int>? cachedPromptTokens;
-  _LlamaContextWrapper(this.pointer, this._modelKeepAlive);
+  _LlamaContextWrapper(this.pointer, this._modelKeepAlive, this.lib);
   void dispose() {
     // ignore: unused_local_variable
     final _ = _modelKeepAlive;
     cachedPromptTokens = null;
-    llama_free(pointer);
+    lib.llama_free(pointer);
   }
 }
