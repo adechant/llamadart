@@ -20250,188 +20250,6 @@ class llama_cpp {
   late final _mtmd_test_create_input_chunks = _mtmd_test_create_input_chunksPtr
       .asFunction<ffi.Pointer<mtmd_input_chunks> Function()>();
 
-  late final ffi.Pointer<ffi.Int> _common_log_verbosity_thold =
-      _lookup<ffi.Int>('common_log_verbosity_thold');
-
-  int get common_log_verbosity_thold => _common_log_verbosity_thold.value;
-
-  set common_log_verbosity_thold(int value) =>
-      _common_log_verbosity_thold.value = value;
-
-  void common_log_set_verbosity_thold(int verbosity) {
-    return _common_log_set_verbosity_thold(verbosity);
-  }
-
-  late final _common_log_set_verbosity_tholdPtr =
-      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int)>>(
-        'common_log_set_verbosity_thold',
-      );
-  late final _common_log_set_verbosity_thold =
-      _common_log_set_verbosity_tholdPtr.asFunction<void Function(int)>();
-
-  void common_log_default_callback(
-    ggml_log_level level,
-    ffi.Pointer<ffi.Char> text,
-    ffi.Pointer<ffi.Void> user_data,
-  ) {
-    return _common_log_default_callback(level.value, text, user_data);
-  }
-
-  late final _common_log_default_callbackPtr =
-      _lookup<
-        ffi.NativeFunction<
-          ffi.Void Function(
-            ffi.UnsignedInt,
-            ffi.Pointer<ffi.Char>,
-            ffi.Pointer<ffi.Void>,
-          )
-        >
-      >('common_log_default_callback');
-  late final _common_log_default_callback = _common_log_default_callbackPtr
-      .asFunction<
-        void Function(int, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Void>)
-      >();
-
-  ffi.Pointer<common_log> common_log_init() {
-    return _common_log_init();
-  }
-
-  late final _common_log_initPtr =
-      _lookup<ffi.NativeFunction<ffi.Pointer<common_log> Function()>>(
-        'common_log_init',
-      );
-  late final _common_log_init = _common_log_initPtr
-      .asFunction<ffi.Pointer<common_log> Function()>();
-
-  ffi.Pointer<common_log> common_log_main() {
-    return _common_log_main();
-  }
-
-  late final _common_log_mainPtr =
-      _lookup<ffi.NativeFunction<ffi.Pointer<common_log> Function()>>(
-        'common_log_main',
-      );
-  late final _common_log_main = _common_log_mainPtr
-      .asFunction<ffi.Pointer<common_log> Function()>();
-
-  void common_log_pause(ffi.Pointer<common_log> log) {
-    return _common_log_pause(log);
-  }
-
-  late final _common_log_pausePtr =
-      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<common_log>)>>(
-        'common_log_pause',
-      );
-  late final _common_log_pause = _common_log_pausePtr
-      .asFunction<void Function(ffi.Pointer<common_log>)>();
-
-  void common_log_resume(ffi.Pointer<common_log> log) {
-    return _common_log_resume(log);
-  }
-
-  late final _common_log_resumePtr =
-      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<common_log>)>>(
-        'common_log_resume',
-      );
-  late final _common_log_resume = _common_log_resumePtr
-      .asFunction<void Function(ffi.Pointer<common_log>)>();
-
-  void common_log_free(ffi.Pointer<common_log> log) {
-    return _common_log_free(log);
-  }
-
-  late final _common_log_freePtr =
-      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<common_log>)>>(
-        'common_log_free',
-      );
-  late final _common_log_free = _common_log_freePtr
-      .asFunction<void Function(ffi.Pointer<common_log>)>();
-
-  void common_log_add(
-    ffi.Pointer<common_log> log,
-    ggml_log_level level,
-    ffi.Pointer<ffi.Char> fmt,
-  ) {
-    return _common_log_add(log, level.value, fmt);
-  }
-
-  late final _common_log_addPtr =
-      _lookup<
-        ffi.NativeFunction<
-          ffi.Void Function(
-            ffi.Pointer<common_log>,
-            ffi.UnsignedInt,
-            ffi.Pointer<ffi.Char>,
-          )
-        >
-      >('common_log_add');
-  late final _common_log_add = _common_log_addPtr
-      .asFunction<
-        void Function(ffi.Pointer<common_log>, int, ffi.Pointer<ffi.Char>)
-      >();
-
-  void common_log_set_file(
-    ffi.Pointer<common_log> log,
-    ffi.Pointer<ffi.Char> file,
-  ) {
-    return _common_log_set_file(log, file);
-  }
-
-  late final _common_log_set_filePtr =
-      _lookup<
-        ffi.NativeFunction<
-          ffi.Void Function(ffi.Pointer<common_log>, ffi.Pointer<ffi.Char>)
-        >
-      >('common_log_set_file');
-  late final _common_log_set_file = _common_log_set_filePtr
-      .asFunction<
-        void Function(ffi.Pointer<common_log>, ffi.Pointer<ffi.Char>)
-      >();
-
-  void common_log_set_colors(ffi.Pointer<common_log> log, log_colors colors) {
-    return _common_log_set_colors(log, colors.value);
-  }
-
-  late final _common_log_set_colorsPtr =
-      _lookup<
-        ffi.NativeFunction<ffi.Void Function(ffi.Pointer<common_log>, ffi.Int)>
-      >('common_log_set_colors');
-  late final _common_log_set_colors = _common_log_set_colorsPtr
-      .asFunction<void Function(ffi.Pointer<common_log>, int)>();
-
-  void common_log_set_prefix(ffi.Pointer<common_log> log, bool prefix) {
-    return _common_log_set_prefix(log, prefix);
-  }
-
-  late final _common_log_set_prefixPtr =
-      _lookup<
-        ffi.NativeFunction<ffi.Void Function(ffi.Pointer<common_log>, ffi.Bool)>
-      >('common_log_set_prefix');
-  late final _common_log_set_prefix = _common_log_set_prefixPtr
-      .asFunction<void Function(ffi.Pointer<common_log>, bool)>();
-
-  void common_log_set_timestamps(ffi.Pointer<common_log> log, bool timestamps) {
-    return _common_log_set_timestamps(log, timestamps);
-  }
-
-  late final _common_log_set_timestampsPtr =
-      _lookup<
-        ffi.NativeFunction<ffi.Void Function(ffi.Pointer<common_log>, ffi.Bool)>
-      >('common_log_set_timestamps');
-  late final _common_log_set_timestamps = _common_log_set_timestampsPtr
-      .asFunction<void Function(ffi.Pointer<common_log>, bool)>();
-
-  void common_log_flush(ffi.Pointer<common_log> log) {
-    return _common_log_flush(log);
-  }
-
-  late final _common_log_flushPtr =
-      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<common_log>)>>(
-        'common_log_flush',
-      );
-  late final _common_log_flush = _common_log_flushPtr
-      .asFunction<void Function(ffi.Pointer<common_log>)>();
-
   void mtmd_helper_log_set(
     ggml_log_callback log_callback,
     ffi.Pointer<ffi.Void> user_data,
@@ -20676,6 +20494,188 @@ class llama_cpp {
               ffi.Pointer<llama_pos>,
             )
           >();
+
+  late final ffi.Pointer<ffi.Int> _common_log_verbosity_thold =
+      _lookup<ffi.Int>('common_log_verbosity_thold');
+
+  int get common_log_verbosity_thold => _common_log_verbosity_thold.value;
+
+  set common_log_verbosity_thold(int value) =>
+      _common_log_verbosity_thold.value = value;
+
+  void common_log_set_verbosity_thold(int verbosity) {
+    return _common_log_set_verbosity_thold(verbosity);
+  }
+
+  late final _common_log_set_verbosity_tholdPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int)>>(
+        'common_log_set_verbosity_thold',
+      );
+  late final _common_log_set_verbosity_thold =
+      _common_log_set_verbosity_tholdPtr.asFunction<void Function(int)>();
+
+  void common_log_default_callback(
+    ggml_log_level level,
+    ffi.Pointer<ffi.Char> text,
+    ffi.Pointer<ffi.Void> user_data,
+  ) {
+    return _common_log_default_callback(level.value, text, user_data);
+  }
+
+  late final _common_log_default_callbackPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Void Function(
+            ffi.UnsignedInt,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Void>,
+          )
+        >
+      >('common_log_default_callback');
+  late final _common_log_default_callback = _common_log_default_callbackPtr
+      .asFunction<
+        void Function(int, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Void>)
+      >();
+
+  ffi.Pointer<common_log> common_log_init() {
+    return _common_log_init();
+  }
+
+  late final _common_log_initPtr =
+      _lookup<ffi.NativeFunction<ffi.Pointer<common_log> Function()>>(
+        'common_log_init',
+      );
+  late final _common_log_init = _common_log_initPtr
+      .asFunction<ffi.Pointer<common_log> Function()>();
+
+  ffi.Pointer<common_log> common_log_main() {
+    return _common_log_main();
+  }
+
+  late final _common_log_mainPtr =
+      _lookup<ffi.NativeFunction<ffi.Pointer<common_log> Function()>>(
+        'common_log_main',
+      );
+  late final _common_log_main = _common_log_mainPtr
+      .asFunction<ffi.Pointer<common_log> Function()>();
+
+  void common_log_pause(ffi.Pointer<common_log> log) {
+    return _common_log_pause(log);
+  }
+
+  late final _common_log_pausePtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<common_log>)>>(
+        'common_log_pause',
+      );
+  late final _common_log_pause = _common_log_pausePtr
+      .asFunction<void Function(ffi.Pointer<common_log>)>();
+
+  void common_log_resume(ffi.Pointer<common_log> log) {
+    return _common_log_resume(log);
+  }
+
+  late final _common_log_resumePtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<common_log>)>>(
+        'common_log_resume',
+      );
+  late final _common_log_resume = _common_log_resumePtr
+      .asFunction<void Function(ffi.Pointer<common_log>)>();
+
+  void common_log_free(ffi.Pointer<common_log> log) {
+    return _common_log_free(log);
+  }
+
+  late final _common_log_freePtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<common_log>)>>(
+        'common_log_free',
+      );
+  late final _common_log_free = _common_log_freePtr
+      .asFunction<void Function(ffi.Pointer<common_log>)>();
+
+  void common_log_add(
+    ffi.Pointer<common_log> log,
+    ggml_log_level level,
+    ffi.Pointer<ffi.Char> fmt,
+  ) {
+    return _common_log_add(log, level.value, fmt);
+  }
+
+  late final _common_log_addPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Void Function(
+            ffi.Pointer<common_log>,
+            ffi.UnsignedInt,
+            ffi.Pointer<ffi.Char>,
+          )
+        >
+      >('common_log_add');
+  late final _common_log_add = _common_log_addPtr
+      .asFunction<
+        void Function(ffi.Pointer<common_log>, int, ffi.Pointer<ffi.Char>)
+      >();
+
+  void common_log_set_file(
+    ffi.Pointer<common_log> log,
+    ffi.Pointer<ffi.Char> file,
+  ) {
+    return _common_log_set_file(log, file);
+  }
+
+  late final _common_log_set_filePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Void Function(ffi.Pointer<common_log>, ffi.Pointer<ffi.Char>)
+        >
+      >('common_log_set_file');
+  late final _common_log_set_file = _common_log_set_filePtr
+      .asFunction<
+        void Function(ffi.Pointer<common_log>, ffi.Pointer<ffi.Char>)
+      >();
+
+  void common_log_set_colors(ffi.Pointer<common_log> log, log_colors colors) {
+    return _common_log_set_colors(log, colors.value);
+  }
+
+  late final _common_log_set_colorsPtr =
+      _lookup<
+        ffi.NativeFunction<ffi.Void Function(ffi.Pointer<common_log>, ffi.Int)>
+      >('common_log_set_colors');
+  late final _common_log_set_colors = _common_log_set_colorsPtr
+      .asFunction<void Function(ffi.Pointer<common_log>, int)>();
+
+  void common_log_set_prefix(ffi.Pointer<common_log> log, bool prefix) {
+    return _common_log_set_prefix(log, prefix);
+  }
+
+  late final _common_log_set_prefixPtr =
+      _lookup<
+        ffi.NativeFunction<ffi.Void Function(ffi.Pointer<common_log>, ffi.Bool)>
+      >('common_log_set_prefix');
+  late final _common_log_set_prefix = _common_log_set_prefixPtr
+      .asFunction<void Function(ffi.Pointer<common_log>, bool)>();
+
+  void common_log_set_timestamps(ffi.Pointer<common_log> log, bool timestamps) {
+    return _common_log_set_timestamps(log, timestamps);
+  }
+
+  late final _common_log_set_timestampsPtr =
+      _lookup<
+        ffi.NativeFunction<ffi.Void Function(ffi.Pointer<common_log>, ffi.Bool)>
+      >('common_log_set_timestamps');
+  late final _common_log_set_timestamps = _common_log_set_timestampsPtr
+      .asFunction<void Function(ffi.Pointer<common_log>, bool)>();
+
+  void common_log_flush(ffi.Pointer<common_log> log) {
+    return _common_log_flush(log);
+  }
+
+  late final _common_log_flushPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<common_log>)>>(
+        'common_log_flush',
+      );
+  late final _common_log_flush = _common_log_flushPtr
+      .asFunction<void Function(ffi.Pointer<common_log>)>();
 }
 
 typedef va_list = ffi.Pointer<ffi.Char>;

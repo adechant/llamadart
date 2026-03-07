@@ -38,7 +38,6 @@ class LlamaCppService {
 
   int _nextHandle = 1;
   LlamaLogLevel _configuredLogLevel = LlamaLogLevel.warn;
-  String _activeBackendName = 'CPU';
   int _activeResolvedGpuLayers = 0;
   bool _mtmdPrimarySymbolsUnavailable = false;
 
@@ -51,7 +50,6 @@ class LlamaCppService {
   final Map<int, llama_context_params> _contextParams = {};
   final Map<int, Map<String, _LlamaLoraWrapper>> _loraAdapters = {};
   final Map<int, Map<String, double>> _activeLoras = {};
-  final Map<int, String> _modelBackendNames = <int, String>{};
   final Map<int, int> _modelResolvedGpuLayers = <int, int>{};
 
   // Mapping: modelHandle -> mtmdContextHandle
@@ -214,19 +212,16 @@ class LlamaCppService {
 
     final modelPathPtr = modelPath.toNativeUtf8();
     final mparams = lib.llama_model_default_params();
-    var preferredDevices = _createPreferredDeviceList(
-      modelParams.preferredBackend,
-    );
     var gpuLayers = resolveGpuLayersForLoad(modelParams);
     var forcedCpuFallback = false;
 
     final explicitGpuBackend =
         modelParams.preferredBackend != GpuBackend.auto &&
         modelParams.preferredBackend != GpuBackend.cpu;
-    if (explicitGpuBackend && preferredDevices == null) {
+    if (explicitGpuBackend) {
       // Honor explicit backend intent: if requested GPU backend is unavailable,
       // fall back to CPU instead of letting another GPU backend auto-select.
-      preferredDevices = _createPreferredDeviceList(GpuBackend.cpu);
+      // TODO: implement check for gpu availability
       gpuLayers = 0;
       forcedCpuFallback = true;
     }
@@ -234,217 +229,26 @@ class LlamaCppService {
 
     mparams.n_gpu_layers = gpuLayers;
     mparams.use_mmap = true;
-    if (preferredDevices != null) {
-      mparams.devices = preferredDevices;
-    }
 
     Pointer<llama_model> modelPtr = nullptr;
     try {
       modelPtr = lib.llama_model_load_from_file(modelPathPtr.cast(), mparams);
     } finally {
       malloc.free(modelPathPtr);
-      if (preferredDevices != null) {
-        malloc.free(preferredDevices);
-      }
     }
 
     if (modelPtr == nullptr) {
-      final diagnostics = _backendDiagnostics();
-      throw Exception(
-        "Failed to load model (size=$modelFileSize bytes, "
-        "diagnostics=$diagnostics)",
-      );
+      throw Exception("Failed to load model (size=$modelFileSize bytes");
     }
 
     final handle = _getHandle();
     _models[handle] = _LlamaModelWrapper(modelPtr, lib);
     _loraAdapters[handle] = {};
     _modelToMtmdUseGpu[handle] = mtmdUseGpu;
-    final resolvedBackend = _resolveBackendNameForLoad(
-      requestedBackend: modelParams.preferredBackend,
-      resolvedGpuLayers: gpuLayers,
-      forcedCpuFallback: forcedCpuFallback,
-    );
-    _modelBackendNames[handle] = resolvedBackend;
     _modelResolvedGpuLayers[handle] = gpuLayers;
-    _activeBackendName = resolvedBackend;
     _activeResolvedGpuLayers = gpuLayers;
 
     return handle;
-  }
-
-  String _resolveBackendNameForLoad({
-    required GpuBackend requestedBackend,
-    required int resolvedGpuLayers,
-    required bool forcedCpuFallback,
-  }) {
-    if (forcedCpuFallback || resolvedGpuLayers <= 0) {
-      return _backendDisplayName('cpu');
-    }
-
-    final backendInfo = getBackendInfo().join(', ');
-
-    switch (requestedBackend) {
-      case GpuBackend.auto:
-        return _resolveAutoBackendName(backendInfo) ??
-            _backendDisplayName('cpu');
-      case GpuBackend.cpu:
-        return _backendDisplayName('cpu');
-      case GpuBackend.vulkan:
-        return _resolveExplicitBackendName(GpuBackend.vulkan, backendInfo);
-      case GpuBackend.metal:
-        return _resolveExplicitBackendName(GpuBackend.metal, backendInfo);
-      case GpuBackend.cuda:
-        return _resolveExplicitBackendName(GpuBackend.cuda, backendInfo);
-      case GpuBackend.blas:
-        return _resolveExplicitBackendName(GpuBackend.blas, backendInfo);
-      case GpuBackend.opencl:
-        return _resolveExplicitBackendName(GpuBackend.opencl, backendInfo);
-      case GpuBackend.hip:
-        return _resolveExplicitBackendName(GpuBackend.hip, backendInfo);
-    }
-  }
-
-  String _resolveExplicitBackendName(GpuBackend backend, String backendInfo) {
-    if (_backendInfoContainsBackendMarker(backendInfo, backend)) {
-      return _backendDisplayName(backend.name);
-    }
-    return _backendDisplayName('cpu');
-  }
-
-  String? _resolveAutoBackendName(String backendInfo) {
-    const preferredOrder = <GpuBackend>[
-      GpuBackend.metal,
-      GpuBackend.cuda,
-      GpuBackend.hip,
-      GpuBackend.vulkan,
-      GpuBackend.opencl,
-      GpuBackend.blas,
-    ];
-
-    for (final backend in preferredOrder) {
-      if (_backendInfoContainsBackendMarker(backendInfo, backend)) {
-        return _backendDisplayName(backend.name);
-      }
-    }
-
-    return null;
-  }
-
-  static bool _backendInfoContainsBackendMarker(
-    String value,
-    GpuBackend backend,
-  ) {
-    final lower = value.toLowerCase();
-    switch (backend) {
-      case GpuBackend.metal:
-        return lower.contains('metal') || lower.contains('mtl');
-      case GpuBackend.vulkan:
-        return lower.contains('vulkan');
-      case GpuBackend.opencl:
-        return lower.contains('opencl');
-      case GpuBackend.hip:
-        return lower.contains('hip');
-      case GpuBackend.cuda:
-        return lower.contains('cuda');
-      case GpuBackend.blas:
-        return lower.contains('blas');
-      case GpuBackend.cpu:
-        return lower.contains('cpu') || lower.contains('llvm');
-      case GpuBackend.auto:
-        return false;
-    }
-  }
-
-  String _backendDiagnostics() {
-    final regs = <String>[];
-    final regCount = lib.ggml_backend_reg_count();
-    for (var i = 0; i < regCount; i++) {
-      final reg = lib.ggml_backend_reg_get(i);
-      if (reg == nullptr) {
-        continue;
-      }
-      final regNamePtr = lib.ggml_backend_reg_name(reg);
-      if (regNamePtr == nullptr) {
-        continue;
-      }
-      regs.add(regNamePtr.cast<Utf8>().toDartString());
-    }
-
-    final devices = getBackendInfo();
-    return 'registeredBackends=$regs, devices=$devices';
-  }
-
-  Pointer<ggml_backend_dev_t>? _createPreferredDeviceList(GpuBackend backend) {
-    final devices = _resolvePreferredDevices(backend);
-    if (devices == null || devices.isEmpty) {
-      return null;
-    }
-
-    final ptr = malloc<ggml_backend_dev_t>(devices.length + 1);
-    for (var i = 0; i < devices.length; i++) {
-      ptr[i] = devices[i];
-    }
-    ptr[devices.length] = nullptr;
-    return ptr;
-  }
-
-  List<ggml_backend_dev_t>? _resolvePreferredDevices(GpuBackend backend) {
-    switch (backend) {
-      case GpuBackend.auto:
-        return null;
-      case GpuBackend.cpu:
-        final cpuDev = lib.ggml_backend_dev_by_type(
-          ggml_backend_dev_type.GGML_BACKEND_DEVICE_TYPE_CPU,
-        );
-        if (cpuDev == nullptr) {
-          return null;
-        }
-        return [cpuDev];
-      case GpuBackend.vulkan:
-        return _devicesForBackendRegName('Vulkan');
-      case GpuBackend.metal:
-        return _devicesForBackendRegName('Metal');
-      case GpuBackend.cuda:
-        return _devicesForBackendRegName('CUDA');
-      case GpuBackend.blas:
-        return _devicesForBackendRegName('BLAS');
-      case GpuBackend.opencl:
-        return _devicesForBackendRegName('OpenCL');
-      case GpuBackend.hip:
-        return _devicesForBackendRegName('HIP');
-    }
-  }
-
-  List<ggml_backend_dev_t>? _devicesForBackendRegName(String regName) {
-    final regNamePtr = regName.toNativeUtf8();
-    try {
-      final reg = lib.ggml_backend_reg_by_name(regNamePtr.cast());
-      if (reg == nullptr) {
-        return null;
-      }
-
-      final count = lib.ggml_backend_reg_dev_count(reg);
-      if (count <= 0) {
-        return null;
-      }
-
-      final devices = <ggml_backend_dev_t>[];
-      for (var i = 0; i < count; i++) {
-        final dev = lib.ggml_backend_reg_dev_get(reg, i);
-        if (dev != nullptr) {
-          devices.add(dev);
-        }
-      }
-
-      if (devices.isEmpty) {
-        return null;
-      }
-
-      return devices;
-    } finally {
-      malloc.free(regNamePtr);
-    }
   }
 
   static bool _looksLikeGguf(File modelFile) {
@@ -494,15 +298,8 @@ class LlamaCppService {
       model.dispose();
     }
 
-    _modelBackendNames.remove(modelHandle);
     _modelResolvedGpuLayers.remove(modelHandle);
-    if (_modelBackendNames.isEmpty) {
-      _activeBackendName = _backendDisplayName('cpu');
-      _activeResolvedGpuLayers = 0;
-    } else {
-      _activeBackendName = _modelBackendNames.values.last;
-      _activeResolvedGpuLayers = _modelResolvedGpuLayers.values.last;
-    }
+    _activeResolvedGpuLayers = 0;
   }
 
   /// Creates an inference context for the specified [modelHandle].
@@ -1992,118 +1789,12 @@ class LlamaCppService {
     }
   }
 
-  /// Returns the currently active backend name.
-  String getActiveBackendName() {
-    return _activeBackendName;
-  }
-
   /// Returns resolved GPU layers for the active model load.
   int? getResolvedGpuLayers() {
     if (_models.isEmpty) {
       return null;
     }
     return _activeResolvedGpuLayers;
-  }
-
-  /// Returns backend names available for selection.
-  ///
-  /// This path avoids optional GPU backend initialization and is intended for
-  /// settings/selector UIs.
-  List<String> getAvailableBackendInfo() {
-    final available = <String>{};
-
-    available.addAll(getBackendInfo());
-
-    if (available.isEmpty) {
-      available.add(_backendDisplayName('cpu'));
-    }
-
-    final ordered = available.toList(growable: false)
-      ..sort((a, b) {
-        final aOrder = _backendDisplaySortKey(a);
-        final bOrder = _backendDisplaySortKey(b);
-        if (aOrder != bOrder) {
-          return aOrder.compareTo(bOrder);
-        }
-        return a.compareTo(b);
-      });
-    return ordered;
-  }
-
-  static int _backendDisplaySortKey(String backendName) {
-    switch (backendName.toUpperCase()) {
-      case 'CPU':
-        return 0;
-      case 'METAL':
-        return 1;
-      case 'VULKAN':
-        return 2;
-      case 'OPENCL':
-        return 3;
-      case 'HIP':
-        return 4;
-      case 'CUDA':
-        return 5;
-      case 'BLAS':
-        return 6;
-      default:
-        return 99;
-    }
-  }
-
-  /// Returns information about currently initialized backend devices.
-  List<String> getBackendInfo() {
-    final count = lib.ggml_backend_dev_count();
-    final devices = <String>{};
-    for (var i = 0; i < count; i++) {
-      final dev = lib.ggml_backend_dev_get(i);
-      if (dev == nullptr) continue;
-
-      final devNamePtr = lib.ggml_backend_dev_name(dev);
-      if (devNamePtr == nullptr) continue;
-      final devName = devNamePtr.cast<Utf8>().toDartString();
-
-      String label = devName;
-      final reg = lib.ggml_backend_dev_backend_reg(dev);
-      if (reg != nullptr) {
-        final regNamePtr = lib.ggml_backend_reg_name(reg);
-        if (regNamePtr != nullptr) {
-          final regName = regNamePtr.cast<Utf8>().toDartString();
-          if (regName.toLowerCase() == devName.toLowerCase()) {
-            label = regName;
-          } else {
-            label = '$regName ($devName)';
-          }
-        }
-      }
-
-      devices.add(label);
-    }
-    if (devices.isNotEmpty) {
-      return devices.toList(growable: false);
-    }
-    return [];
-  }
-
-  static String _backendDisplayName(String backend) {
-    switch (backend.toLowerCase()) {
-      case 'cpu':
-        return 'CPU';
-      case 'vulkan':
-        return 'Vulkan';
-      case 'opencl':
-        return 'OpenCL';
-      case 'metal':
-        return 'Metal';
-      case 'cuda':
-        return 'CUDA';
-      case 'hip':
-        return 'HIP';
-      case 'blas':
-        return 'BLAS';
-      default:
-        return backend;
-    }
   }
 
   /// Returns whether GPU offloading is supported.
@@ -2121,9 +1812,7 @@ class LlamaCppService {
       m.dispose();
     }
     _models.clear();
-    _modelBackendNames.clear();
     _modelResolvedGpuLayers.clear();
-    _activeBackendName = _backendDisplayName('cpu');
     _activeResolvedGpuLayers = 0;
     for (final m in _mtmdContexts.values) {
       lib.mtmd_free(m);

@@ -1,0 +1,9 @@
+name: 'ggml_backend'
+description: 'ggml backend binding'
+output: 'lib/src/backends/generated/ggml_backend.dart'
+# ignore-source-errors: true
+headers:
+  entry-points:
+    - 'include/ggml-backend.h'
+compiler-opts:
+  - '-I/usr/lib/clang/17/include'  
