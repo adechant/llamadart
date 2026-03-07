@@ -229,6 +229,8 @@ class LlamaCppService {
 
     mparams.n_gpu_layers = gpuLayers;
     mparams.use_mmap = true;
+    //todo add ability to choose gpu or device...
+    mparams.main_gpu = 0;
 
     Pointer<llama_model> modelPtr = nullptr;
     try {
