@@ -26,7 +26,7 @@ class LlamaCppService {
       } else if (Platform.isLinux) {
         _lib = llama_cpp(DynamicLibrary.open("libllama.so"));
       } else if (Platform.isWindows) {
-        _lib = llama_cpp(DynamicLibrary.open("./llama.dll"));
+        _lib = llama_cpp(DynamicLibrary.open("llama.dll"));
       } else if (Platform.isMacOS) {
         _lib = llama_cpp(DynamicLibrary.open("libllama.dylib"));
       } else {
