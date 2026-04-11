@@ -8,7 +8,7 @@ cmake_minimum_required(VERSION 3.14)
 # This can be changed to accommodate different builds.
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../src" "${CMAKE_CURRENT_BINARY_DIR}/lib")
 
-set(llama_cpp_dart_bundled_libraries
+set(llamadart_bundled_libraries
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/llama.cpp/build/bin/Release/ggml-base.dll" 
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/llama.cpp/build/bin/Release/ggml-cpu.dll"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/llama.cpp/build/bin/Release/ggml-cuda.dll"
