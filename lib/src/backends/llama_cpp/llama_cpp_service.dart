@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
 import 'dart:math' as math;
-
 import 'package:ffi/ffi.dart';
 
 import '../../core/models/chat/content_part.dart';
@@ -19,19 +18,19 @@ import '../generated/llama_cpp.dart';
 /// including loading models, creating contexts, managing memory, and running inference.
 class LlamaCppService {
   static llama_cpp? _lib;
+
+  static final _libPaths = {
+    'android': 'libllama.so',
+    'linux': 'libllama.so',
+    'windows': 'llama.dll',
+    'macos': 'libllama.dylib',
+  };
+
   static llama_cpp get lib {
     if (_lib == null) {
-      if (Platform.isAndroid) {
-        _lib = llama_cpp(DynamicLibrary.open("libllama.so"));
-      } else if (Platform.isLinux) {
-        _lib = llama_cpp(DynamicLibrary.open("libllama.so"));
-      } else if (Platform.isWindows) {
-        _lib = llama_cpp(DynamicLibrary.open("llama.dll"));
-      } else if (Platform.isMacOS) {
-        _lib = llama_cpp(DynamicLibrary.open("libllama.dylib"));
-      } else {
-        throw UnsupportedError('Unknown platform: ${Platform.operatingSystem}');
-      }
+      final path = _libPaths[Platform.operatingSystem.toLowerCase()];
+      if (path == null) throw UnsupportedError('Unsupported platform');
+      _lib = llama_cpp(DynamicLibrary.open(path));
     }
     return _lib!;
   }
@@ -332,6 +331,9 @@ class LlamaCppService {
     ctxParams.n_seq_max = resolvedMaxParallelSequences;
     ctxParams.n_threads = params.numberOfThreads;
     ctxParams.n_threads_batch = params.numberOfThreadsBatch;
+    ctxParams.flash_attn_typeAsInt = params.useFlashAttention
+        ? llama_flash_attn_type.LLAMA_FLASH_ATTN_TYPE_ENABLED.value
+        : llama_flash_attn_type.LLAMA_FLASH_ATTN_TYPE_AUTO.value;
     if (resolvedMaxParallelSequences > 1) {
       // Keep per-sequence context at full n_ctx when multiple sequence slots
       // are enabled so regular generation behavior is unchanged.

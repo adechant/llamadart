@@ -30,21 +30,21 @@ dev_dependencies:
 
 analyzer:
   exclude:
-    - 'lib/src/llama_cpp.dart'
+    - "lib/src/llama_cpp.dart"
 
 ffigen: # dart run ffigen
-  name: 'llama_cpp'
-  description: 'llama.cpp binding'
-  output: 'lib/src/backends/generated/llama_cpp.dart'
+  name: "llama_cpp"
+  description: "llama.cpp binding"
+  output: "lib/src/backends/generated/llama_cpp.dart"
   # ignore-source-errors: true
   headers:
     entry-points:
-      - 'include/mtmd.h'
-      - 'include/mtmd-helper.h'
-      - 'include/log.h'
-      
+      - "include/mtmd.h"
+      - "include/mtmd-helper.h"
+      - "include/log.h"
+
   compiler-opts:
-    - '-I/usr/lib/clang/17/include'
+    - "-I/usr/lib/clang/17/include"
 
 flutter:
   plugin:

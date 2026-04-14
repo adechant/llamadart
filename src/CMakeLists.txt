@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 
 # Project-level configuration.
-set(PROJECT_NAME "llama_cpp_dart")
+set(PROJECT_NAME "llamadart")
 project(${PROJECT_NAME} LANGUAGES CXX)
 
 
@@ -17,15 +17,8 @@ endif()
 
 add_custom_target(
     ${PROJECT_NAME} ALL
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/llama.cpp
+    COMMAND cmake -B build -DGGML_CUDA=ON -DWHISPER_OPENVINO=ON -DBUILD_SHARED_LIBS=ON -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_TOOLS=ON -DLLAMA_BUILD_SERVER=OFF #-DGGML_NATIVE=OFF -DGGML_VULKAN=ON -DGGML_BACKEND_DL=ON
     COMMAND cmake --build build --config Release -j 8
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/llama.cpp
     COMMENT "Building llama library"
-)
-
-add_custom_command(
-    TARGET ${PROJECT_NAME}
-    PRE_BUILD
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/llama.cpp
-    COMMAND cmake -B build -DGGML_CUDA=ON -DLLAMA_CURL=OFF
-    COMMENT "configuring llama library build"
 )

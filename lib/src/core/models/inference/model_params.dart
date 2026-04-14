@@ -70,6 +70,9 @@ class ModelParams {
   /// Set to 1 to preserve single-sequence behavior.
   final int maxParallelSequences;
 
+  /// Whether to use flash attention (flash_attn).
+  final bool useFlashAttention;
+
   /// Maximum number of GPU layers to safely offload all layers.
   static const int maxGpuLayers = 999;
 
@@ -85,6 +88,7 @@ class ModelParams {
     this.batchSize = 0,
     this.microBatchSize = 0,
     this.maxParallelSequences = 1,
+    this.useFlashAttention = true,
   });
 
   /// Creates a copy of this [ModelParams] with updated fields.
@@ -99,6 +103,7 @@ class ModelParams {
     int? batchSize,
     int? microBatchSize,
     int? maxParallelSequences,
+    bool? useFlashAttention,
   }) {
     return ModelParams(
       contextSize: contextSize ?? this.contextSize,
@@ -111,6 +116,7 @@ class ModelParams {
       batchSize: batchSize ?? this.batchSize,
       microBatchSize: microBatchSize ?? this.microBatchSize,
       maxParallelSequences: maxParallelSequences ?? this.maxParallelSequences,
+      useFlashAttention: useFlashAttention ?? this.useFlashAttention,
     );
   }
 }

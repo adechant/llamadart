@@ -9,6 +9,16 @@ cmake_minimum_required(VERSION 3.14)
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../src" "${CMAKE_CURRENT_BINARY_DIR}/lib")
 
 set(llamadart_bundled_libraries
+    #"${CMAKE_CURRENT_SOURCE_DIR}/../src/llama.cpp/build/bin/Release/ggml-cpu-alderlake.dll"
+    #"${CMAKE_CURRENT_SOURCE_DIR}/../src/llama.cpp/build/bin/Release/ggml-cpu-cannonlake.dll"
+    #"${CMAKE_CURRENT_SOURCE_DIR}/../src/llama.cpp/build/bin/Release/ggml-cpu-cascadelake.dll"
+    #"${CMAKE_CURRENT_SOURCE_DIR}/../src/llama.cpp/build/bin/Release/ggml-cpu-haswell.dll"
+    #"${CMAKE_CURRENT_SOURCE_DIR}/../src/llama.cpp/build/bin/Release/ggml-cpu-icelake.dll"
+    #"${CMAKE_CURRENT_SOURCE_DIR}/../src/llama.cpp/build/bin/Release/ggml-cpu-sandybridge.dll"
+    #"${CMAKE_CURRENT_SOURCE_DIR}/../src/llama.cpp/build/bin/Release/ggml-cpu-skylakex.dll"
+    #"${CMAKE_CURRENT_SOURCE_DIR}/../src/llama.cpp/build/bin/Release/ggml-cpu-sse42.dll"
+    #"${CMAKE_CURRENT_SOURCE_DIR}/../src/llama.cpp/build/bin/Release/ggml-cpu-x64.dll"
+    #"${CMAKE_CURRENT_SOURCE_DIR}/../src/llama.cpp/build/bin/Release/ggml-vulkan.dll"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/llama.cpp/build/bin/Release/ggml-base.dll" 
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/llama.cpp/build/bin/Release/ggml-cpu.dll"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/llama.cpp/build/bin/Release/ggml-cuda.dll"
